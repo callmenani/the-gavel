@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useAuction } from "../contexts/AuctionContext";
 import {
@@ -59,7 +59,6 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import AuctionActivityFeed from "../components/AuctionActivityFeed";
 import Footer from "../components/Footer";
 import AdSlot from "../components/AdSlot";
-import CommunitySection from "../components/community/CommunitySection";
 import CommunityBanner from "../components/community/CommunityBanner";
 import ServerSwitcher from "../components/ServerSwitcher";
 import PageBackground from "../components/PageBackground";
@@ -155,12 +154,25 @@ const isSessionLocal = (session) =>
 
 const LandingPage = () => {
   useDocumentTitle(
-    "TheGavel - Multiplayer T20 Auction Simulator | Fan-Made Cricket Game",
-    "An independent, fan-made multiplayer T20 cricket auction simulator. Host tactical auctions with friends, manage squad budgets, and draft your dream T20 squad.",
+    "Play Hub | TheGavel — Create, Join & History",
+    "Create auction rooms, join public lobbies, and review your squad history in the TheGavel play hub.",
   );
 
+  const location = useLocation();
+  const activeTab = useMemo(() => {
+    if (location.pathname.endsWith("/join")) return "join";
+    if (location.pathname.endsWith("/history")) return "history";
+    return "new";
+  }, [location.pathname]);
+
+  const playTabClass = (tab) =>
+    `pb-3 px-3 sm:pb-3.5 sm:px-5 font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all duration-200 border-b-2 relative shrink-0 ${
+      activeTab === tab
+        ? "border-slate-400/70 text-slate-100"
+        : "border-transparent text-gray-400 hover:text-gray-300"
+    }`;
+
   const [selectedTeam, setSelectedTeam] = useState("MI");
-  const [activeTab, setActiveTab] = useState("new");
   const [auctionType, setAuctionType] = useState("mega");
   const [playSolo, setPlaySolo] = useState(!FEATURE_MULTIPLAYER);
   const [isPublicRoom, setIsPublicRoom] = useState(true);
@@ -638,37 +650,19 @@ const LandingPage = () => {
         <main className="relative w-full flex-1 flex flex-col items-center justify-start pt-6 sm:pt-8 px-3 sm:px-4 z-10 pb-20 sm:pb-32">
 
         <div className="text-center mb-3 sm:mb-4 z-10 relative max-w-2xl px-2 sm:px-4 mt-1 sm:mt-2">
-          <h1 className="sr-only">
-            TheGavel - Fan-Made Multiplayer T20 Cricket Auction Simulator
-          </h1>
-
-          <div className="text-[clamp(1.25rem,2.8vw,2.35rem)] font-pixel leading-none text-balance bg-clip-text text-transparent bg-gradient-to-b from-white via-white/90 to-white/60">
-            CREATE YOUR
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-[0.25em] text-slate-500 hover:text-slate-300 mb-3"
+          >
+            ← Home
+          </Link>
+          <h1 className="sr-only">TheGavel play hub — sign in</h1>
+          <div className="text-[clamp(1.5rem,3vw,2rem)] font-pixel text-white/90 leading-none">
+            Play hub
           </div>
-          <div className="text-[clamp(2.1rem,5.6vw,3.85rem)] font-pixel leading-none uppercase text-balance mt-0.5 sm:mt-1 drop-shadow-[0_2px_12px_rgba(255,255,255,0.08)]">
-            AUCTION ROOM
-          </div>
-
           <p className="text-xs sm:text-[13px] text-slate-400 font-pixel max-w-lg mx-auto mt-2 leading-relaxed px-1">
-            The ultimate multiplayer IPL auction simulator and game. Host live
-            IPL mega auctions with friends in real-time, choose your favorite
-            franchise, bid strategically, and build a championship T20 squad.
+            Sign in to create rooms, join lobbies, or continue a solo auction on this device.
           </p>
-
-          {/* Watermelon-style Micro Step Indicators */}
-          <div className="inline-flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 mt-2.5 sm:mt-3 px-3 py-1.5 rounded-xl bg-white/[0.02] border border-dashed border-white/10 text-[8.5px] sm:text-[9.5px] font-black tracking-wider sm:tracking-widest text-slate-400 uppercase select-none">
-            <span className="hover:text-slate-200 transition-colors">
-              ① Create Room
-            </span>
-            <span className="text-white/20">➔</span>
-            <span className="hover:text-slate-200 transition-colors">
-              ② Invite Friends
-            </span>
-            <span className="text-white/20">➔</span>
-            <span className="hover:text-slate-200 transition-colors">
-              ③ Start Bidding
-            </span>
-          </div>
         </div>
 
         <PanelSurface className="mt-2 sm:mt-3">
@@ -792,8 +786,6 @@ const LandingPage = () => {
 
         <AdSlot className="mt-8 mb-4 px-2.5 sm:px-4" />
 
-        <CommunitySection />
-
         <Footer />
       </main>
     </div>
@@ -811,39 +803,17 @@ const LandingPage = () => {
       </div>
       <main className="relative w-full flex-1 flex flex-col items-center justify-start pt-6 sm:pt-8 px-3 sm:px-4 z-10 pb-20 sm:pb-32">
 
-      {/* Hero */}
       <div className="text-center mb-3 sm:mb-4 z-10 relative max-w-2xl px-2 sm:px-4 mt-1 sm:mt-2">
-        <h1 className="sr-only">
-          TheGavel - Fan-Made Multiplayer T20 Cricket Auction Simulator
-        </h1>
-
-        <div className="text-[clamp(1.25rem,2.8vw,2.35rem)] font-pixel leading-none text-balance bg-clip-text text-transparent bg-gradient-to-b from-white via-white/90 to-white/60">
-          CREATE YOUR
-        </div>
-        <div className="text-[clamp(2.1rem,5.6vw,3.85rem)] font-pixel leading-none uppercase text-balance mt-0.5 sm:mt-1 drop-shadow-[0_2px_12px_rgba(255,255,255,0.08)]">
-          AUCTION ROOM
-        </div>
-
-        <p className="text-xs sm:text-[13px] text-slate-400 font-pixel max-w-lg mx-auto mt-2 leading-relaxed px-1">
-          The ultimate multiplayer IPL auction simulator and game. Host live IPL
-          mega auctions with friends in real-time, choose your favorite
-          franchise, bid strategically, and build a championship T20 squad.
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-[0.25em] text-slate-500 hover:text-slate-300 mb-3"
+        >
+          ← Home
+        </Link>
+        <h1 className="text-[clamp(1.5rem,3vw,2.25rem)] font-pixel text-white">Auction hub</h1>
+        <p className="text-xs sm:text-[13px] text-slate-400 max-w-lg mx-auto mt-2">
+          Create · Join · History — each tab is its own URL for sharing and bookmarks.
         </p>
-
-        {/* Watermelon-style Micro Step Indicators */}
-        <div className="inline-flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 mt-2.5 sm:mt-3 px-3 py-1.5 rounded-xl bg-white/[0.02] border border-dashed border-white/10 text-[8.5px] sm:text-[9.5px] font-black tracking-wider sm:tracking-widest text-slate-400 uppercase select-none">
-          <span className="hover:text-slate-200 transition-colors">
-            ① Create Room
-          </span>
-          <span className="text-white/20">➔</span>
-          <span className="hover:text-slate-200 transition-colors">
-            ② Invite Friends
-          </span>
-          <span className="text-white/20">➔</span>
-          <span className="hover:text-slate-200 transition-colors">
-            ③ Start Bidding
-          </span>
-        </div>
       </div>
 
       <PanelSurface className="mt-2 sm:mt-3">
@@ -877,26 +847,13 @@ const LandingPage = () => {
             {/* Flat Tab Bar Navigation: Create / Join / History */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-white/5 mb-5 sm:mb-8 gap-3 sm:gap-4">
               <div className="flex overflow-x-auto no-scrollbar">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("new")}
-                  className={`pb-3 px-3 sm:pb-3.5 sm:px-5 font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all duration-200 border-b-2 relative shrink-0 ${
-                    activeTab === "new"
-                      ? "border-slate-400/70 text-slate-100"
-                      : "border-transparent text-gray-400 hover:text-gray-300"
-                  }`}
-                >
+                <Link to="/play" className={playTabClass("new")}>
                   Create
-                </button>
+                </Link>
                 {FEATURE_MULTIPLAYER && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("join")}
-                  className={`pb-3 px-3 sm:pb-3.5 sm:px-5 font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all duration-200 border-b-2 relative shrink-0 flex items-center gap-1.5 ${
-                    activeTab === "join"
-                      ? "border-slate-400/70 text-slate-100"
-                      : "border-transparent text-gray-400 hover:text-gray-300"
-                  }`}
+                <Link
+                  to="/play/join"
+                  className={`${playTabClass("join")} flex items-center gap-1.5`}
                 >
                   <span>Join</span>
                   <span
@@ -908,19 +865,11 @@ const LandingPage = () => {
                   >
                     {serverRoomsCount}
                   </span>
-                </button>
+                </Link>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("history")}
-                  className={`pb-3 px-3 sm:pb-3.5 sm:px-5 font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all duration-200 border-b-2 relative shrink-0 ${
-                    activeTab === "history"
-                      ? "border-slate-400/70 text-slate-100"
-                      : "border-transparent text-gray-400 hover:text-gray-300"
-                  }`}
-                >
+                <Link to="/play/history" className={playTabClass("history")}>
                   History
-                </button>
+                </Link>
               </div>
 
               {/* User Profile and Logout */}
@@ -1952,8 +1901,6 @@ const LandingPage = () => {
       />
 
       <AdSlot className="mt-8 mb-4 px-2.5 sm:px-4" />
-
-      <CommunitySection />
 
       <Footer />
       </main>

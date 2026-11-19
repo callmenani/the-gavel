@@ -53,7 +53,13 @@ export default function NotFound() {
               to="/"
               className="flex items-center justify-center gap-2 w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#ff5500] to-[#ff8c00] text-white font-black text-xs uppercase tracking-[0.2em] shadow-[0_10px_30px_rgba(255,85,0,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
-              <Home className="w-4 h-4" /> Return to Auction Hub
+              <Home className="w-4 h-4" /> Back to home
+            </Link>
+            <Link
+              to="/play"
+              className="flex items-center justify-center gap-2 w-full py-3 px-6 rounded-xl border border-white/15 text-gray-300 font-black text-xs uppercase tracking-[0.2em] hover:bg-white/5 transition-all"
+            >
+              Open play hub
             </Link>
 
             <Link

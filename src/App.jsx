@@ -6,6 +6,7 @@ import { QuotaProvider } from './contexts/QuotaContext'
 import { ConnectionAlertProvider } from './contexts/ConnectionAlertContext'
 import ScrollToTop from './components/ScrollToTop'
 import PageLoader from './components/PageLoader'
+import HomePage from './pages/HomePage'
 import LandingPage from './pages/LandingPage'
 import './index.css'
 
@@ -14,6 +15,8 @@ const AuctionRoom     = lazy(() => import('./pages/AuctionRoom'))
 const AuctionSummary  = lazy(() => import('./pages/AuctionSummary'))
 const Lobby           = lazy(() => import('./pages/Lobby'))
 const GameGuide       = lazy(() => import('./pages/GameGuide'))
+const FeaturesPage    = lazy(() => import('./pages/FeaturesPage'))
+const CommunityPage   = lazy(() => import('./pages/CommunityPage'))
 const AboutUs         = lazy(() => import('./pages/AboutUs'))
 const PrivacyPolicy   = lazy(() => import('./pages/PrivacyPolicy'))
 const TermsConditions = lazy(() => import('./pages/TermsConditions'))
@@ -48,8 +51,16 @@ function App() {
                 </Suspense>
 
                 <Routes>
-                  {/* LandingPage is eagerly loaded — it IS the first paint */}
-                  <Route path="/" element={<LandingPage />} />
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/play" element={<LandingPage />} />
+                  <Route path="/play/join" element={<LandingPage />} />
+                  <Route path="/play/history" element={<LandingPage />} />
+                  <Route path="/features" element={
+                    <Suspense fallback={<PageFallback />}><FeaturesPage /></Suspense>
+                  } />
+                  <Route path="/community" element={
+                    <Suspense fallback={<PageFallback />}><CommunityPage /></Suspense>
+                  } />
 
                   {/* All other routes are code-split into separate chunks */}
                   <Route path="/admin" element={
