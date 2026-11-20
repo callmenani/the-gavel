@@ -3007,7 +3007,7 @@ const AuctionRoom = () => {
          <ConfirmDialog
             isOpen={showReopenConfirm}
             title="Pull this player back?"
-            description={`${currentPlayer?.name || 'The player'} was just sold. Reopening lets any manager (including the one who missed the sale due to lag) re-enter the auction. The buyer's payment is refunded and the lot restarts bidding from ₹0.`}
+            description={`${currentPlayer?.name || 'The player'} was just sold. Reopening lets any manager (including the one who missed the sale due to lag) re-enter the auction. The buyer's payment is refunded and the lot resumes bidding from the last winning bid and team.`}
             detail={`Room ${id}`}
             confirmLabel="Take back & re-bid"
             cancelLabel="Keep the sale"
