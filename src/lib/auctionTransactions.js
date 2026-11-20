@@ -246,9 +246,15 @@ export function transactRoomPlayersSaleRevert(currentRoom, {
 }
 
 /**
- * Host "get the player back": undo a just-sold lot and reopen it for fresh
- * bidding (price starts at 0, so it can rise again). Reverting the winner's
- * squad/purse is done separately via the team/room reversal transactions.
+ * Host "get the player back": undo a just-sold lot and reopen it for re-bid.
+ * Reverting the winner's squad/purse is done separately via the team/room
+ * reversal transactions.
+ *
+ * The lot resumes *from* the last winning bid: the bid amount and the team
+ * that placed it are restored rather than reset to ₹0, so the re-auction can
+ * only move up (the restored high bidder simply keeps the lot until someone
+ * outbids). The consent-gate bookkeeping is cleared so the lot is back in a
+ * clean bidding state.
  */
 export function transactReopen(currentLive, {
   currentPlayerId,
@@ -264,12 +270,8 @@ export function transactReopen(currentLive, {
   }
 
   return {
-    ...currentLive,
+    ...currentLive,            // ← preserves currentBid, highBidderId, highBidderName, highBidderTeamId
     status: 'bidding',
-    currentBid: 0,
-    highBidderId: '',
-    highBidderName: '',
-    highBidderTeamId: '',
     timerEndsAt,
     passes: null,
     consentVotes: null,
