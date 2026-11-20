@@ -124,6 +124,30 @@ export default function Footer20() {
                 </li>
                 <li>
                   <Link
+                    to="/play"
+                    className="text-[14px] text-gray-400 hover:text-white transition-colors"
+                  >
+                    Play Hub
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/features"
+                    className="text-[14px] text-gray-400 hover:text-white transition-colors"
+                  >
+                    Features
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/community"
+                    className="text-[14px] text-gray-400 hover:text-white transition-colors"
+                  >
+                    Community
+                  </Link>
+                </li>
+                <li>
+                  <Link
                     to="/guide"
                     className="text-[14px] text-gray-400 hover:text-white transition-colors"
                   >

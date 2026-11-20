@@ -25,8 +25,8 @@ import {
   Loader2,
   AlertCircle,
   Sparkles,
-  FileText
 } from 'lucide-react';
+import LeagueScheduleTab from '../components/league/LeagueScheduleTab';
 import { motion, AnimatePresence } from 'framer-motion';
 import SquadRating from '../components/SquadRating';
 import NotionTeamSheet from '../components/NotionTeamSheet';
@@ -449,12 +449,12 @@ const AuctionSummary = () => {
 
         {/* Tab Navigation */}
         <div className="mb-6 sm:mb-12">
-          <div className="bg-[#0c0d10] backdrop-blur-3xl p-1 sm:p-1.5 rounded-2xl border border-white/10 grid grid-cols-4 sm:flex sm:justify-center gap-1 sm:gap-2 max-w-full sm:max-w-max mx-auto shadow-2xl">
             {[
               { id: 'sheet', label: 'Sheet', fullLabel: 'Team Sheet', icon: FileText },
               { id: 'squads', label: 'Squads', fullLabel: 'Team Squads', icon: Users },
               { id: 'leaderboard', label: 'Top 5', fullLabel: 'Top Expensive', icon: Trophy },
               { id: 'fantasy', label: 'Ratings', fullLabel: 'Squad Ratings', icon: Sparkles },
+              { id: 'league', label: 'League', fullLabel: 'Schedule & Votes', icon: CalendarDays },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -570,6 +570,21 @@ const AuctionSummary = () => {
                 currentAuction={activeAuction}
                 auctionId={id || activeAuction?.id}
                 isHost={isHost}
+              />
+            </motion.section>
+          ) : activeTab === 'league' ? (
+            <motion.section
+              key="league"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
+              <LeagueScheduleTab
+                auctionId={id || activeAuction?.id}
+                activeTeams={activeTeams}
+                activeAuction={activeAuction}
+                server={server}
+                user={user}
               />
             </motion.section>
           ) : (
