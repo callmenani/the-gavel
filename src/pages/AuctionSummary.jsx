@@ -25,6 +25,8 @@ import {
   Loader2,
   AlertCircle,
   Sparkles,
+  FileText,
+  CalendarDays,
 } from 'lucide-react';
 import LeagueScheduleTab from '../components/league/LeagueScheduleTab';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -449,6 +451,7 @@ const AuctionSummary = () => {
 
         {/* Tab Navigation */}
         <div className="mb-6 sm:mb-12">
+          <div className="bg-[#0c0d10] backdrop-blur-3xl p-1 sm:p-1.5 rounded-2xl border border-white/10 grid grid-cols-4 sm:flex sm:justify-center gap-1 sm:gap-2 max-w-full sm:max-w-max mx-auto shadow-2xl">
             {[
               { id: 'sheet', label: 'Sheet', fullLabel: 'Team Sheet', icon: FileText },
               { id: 'squads', label: 'Squads', fullLabel: 'Team Squads', icon: Users },
