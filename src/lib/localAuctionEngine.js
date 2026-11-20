@@ -844,7 +844,7 @@ export function localAuctionReducer(state, action) {
 
       const timerSec = state.settings?.bidTimer || 10;
       const isResolved = live.status === 'sold' || live.status === 'unsold' || live.status === 'awaiting_consent';
-      let nextIndex = state.currentPlayerIndex;
+      let nextIndex = curIdx;
       let nextLot = live;
       if (isResolved) {
         nextIndex = insertAt; // start the recalled lot right now

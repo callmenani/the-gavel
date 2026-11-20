@@ -2863,7 +2863,13 @@ export const AuctionProvider = ({ children }) => {
       return;
     }
 
-    if (!user || !currentAuction || currentAuction.hostId !== user.uid) return;
+    if (!user || !currentAuction) return;
+
+    // Allow host, co-hosts/sticky admins, and the currently-elected active admin
+    // to pause the auction.
+    const isHost = currentAuction.hostId === user.uid;
+    const isActiveAdmin = currentAuction.activeAdminId === user.uid;
+    if (!isHost && !isActiveAdmin && !currentAuction?.admins?.[user?.uid]) return;
 
     // Prevent pause race condition: only pause if actively bidding and > 2s remaining
     const tx = await pauseLiveLot(rtdb, roomId, getSyncedTime());
@@ -2888,7 +2894,13 @@ export const AuctionProvider = ({ children }) => {
       return;
     }
 
-    if (!user || !currentAuction || currentAuction.hostId !== user.uid) return;
+    if (!user || !currentAuction) return;
+
+    // Allow host, co-hosts/sticky admins, and the currently-elected active admin
+    // to resume the auction.
+    const isHost = currentAuction.hostId === user.uid;
+    const isActiveAdmin = currentAuction.activeAdminId === user.uid;
+    if (!isHost && !isActiveAdmin && !currentAuction?.admins?.[user?.uid]) return;
     
     const liveRef = ref(rtdb, `auctions/${roomId}/live`);
     const now = getSyncedTime();
