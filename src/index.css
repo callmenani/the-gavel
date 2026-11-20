@@ -331,6 +331,12 @@ button, .no-select {
   .animate-glow {
     animation: none !important;
   }
+
+  /* The animated gold text gradient repaints background-position every frame
+     on iOS; the static gradient looks identical, just without the shimmer. */
+  .text-premium-gradient {
+    animation: none !important;
+  }
 }
 
 /* ── Pure CSS Marquee (replaces JS-driven framer-motion scroll) ─────────────

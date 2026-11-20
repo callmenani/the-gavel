@@ -823,6 +823,63 @@ export function localAuctionReducer(state, action) {
       );
     }
 
+    // Host "get the player back": re-insert any player into the order right
+    // after the current position so they get re-bid on (solo rooms).
+    case 'RECALL_PLAYER': {
+      if (!state || state.status !== 'active') return state;
+      const live = state.currentAuction;
+      if (!live) return state;
+      const { playerIndex, now = Date.now() } = action;
+      const player = IPL_PLAYERS[playerIndex];
+      if (playerIndex == null || !player) return state;
+
+      const order = Array.isArray(state.playerOrder) ? state.playerOrder : [];
+      const cleaned = order.filter((i) => i !== playerIndex);
+      const curIdx = cleaned.findIndex((i) => {
+        const p = IPL_PLAYERS[i];
+        return p && p.id === live.playerId;
+      });
+      const insertAt = curIdx >= 0 ? curIdx + 1 : cleaned.length;
+      const newOrder = [...cleaned.slice(0, insertAt), playerIndex, ...cleaned.slice(insertAt)];
+
+      const timerSec = state.settings?.bidTimer || 10;
+      const isResolved = live.status === 'sold' || live.status === 'unsold' || live.status === 'awaiting_consent';
+      let nextIndex = state.currentPlayerIndex;
+      let nextLot = live;
+      if (isResolved) {
+        nextIndex = insertAt; // start the recalled lot right now
+        nextLot = {
+          playerId: player.id,
+          currentBid: 0,
+          highBidderId: '',
+          highBidderName: '',
+          highBidderTeamId: '',
+          timerEndsAt: now + timerSec * 1000,
+          status: 'bidding',
+          pausedRemainingMs: null,
+          consentVotes: null,
+          consentDeadline: null,
+        };
+      }
+
+      return {
+        ...state,
+        playerOrder: newOrder,
+        currentPlayerIndex: nextIndex,
+        currentAuction: nextLot,
+        currentLot: nextLot,
+        messages: [
+          ...state.messages.slice(-50),
+          {
+            id: `recall_${player.id}_${now}`,
+            text: `Host pulled ${player.name} back into the auction.`,
+            type: 'log',
+            timestamp: now,
+          },
+        ],
+      };
+    }
+
     // Host undo: pull the just-sold player back and reopen it for fresh bidding.
     // Reverses the sale (refunds the buyer, frees the squad slot) so a lagging
     // manager can still compete. Re-bids start from 0, so the price can rise.

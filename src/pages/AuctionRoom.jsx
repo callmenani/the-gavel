@@ -31,7 +31,15 @@ import {
    Loader2,
    Check,
    RotateCcw,
-   ShieldCheck
+   ShieldCheck,
+   Search,
+   Crown,
+   UserPlus,
+   Ban,
+   Mic,
+   MicOff,
+   Hand,
+   PhoneOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -41,8 +49,11 @@ import PageLoader from '../components/PageLoader';
 import PageBackground from '../components/PageBackground';
 import ConfirmDialog from '../components/ConfirmDialog';
 import AuctionCountdown from '../components/AuctionCountdown';
+import ConsentGateCountdown from '../components/ConsentGateCountdown';
 import AdSlot, { AuctionRoomAd, DEFAULT_AUCTION_ROOM_SLOT } from '../components/AdSlot';
 import useRoomServer from '../hooks/useRoomServer';
+import useRoomVoice from '../hooks/useRoomVoice';
+import { getRtdb } from '../lib/firebase';
 import { SERVER_LOCAL, withServerParam } from '../lib/auctionServers';
 import { isLocalRoom } from '../lib/localAuctionEngine';
 import useDocumentTitle from '../hooks/useDocumentTitle';
@@ -84,7 +95,10 @@ const AuctionRoom = () => {
       takeOverSoloAuction,
       confirmConsent,
       forceConsentAdvance,
-      reopenSoldLot
+      reopenSoldLot,
+      skipLot,
+      recallPlayer,
+      grantAdmin
    } = useAuction();
    const { user } = useAuth();
    const [error, setError] = useState('');
@@ -245,20 +259,9 @@ const AuctionRoom = () => {
    const consentTotal = Math.max(1, consentHumans.length);
    const iConsented = Boolean(user?.uid && consentVotes[user.uid]);
 
-   // 1s ticker for the consent-deadline countdown (only runs inside the gate).
-   const [consentTick, setConsentTick] = useState(0);
-   useEffect(() => {
-      if (!isConsentGate) return undefined;
-      setConsentTick(Date.now());
-      const t = setInterval(() => setConsentTick(Date.now()), 1000);
-      return () => clearInterval(t);
-   }, [isConsentGate, displayAuctionState?.playerId]);
-   void consentTick;
-
-   const consentRemainingSec = Math.max(
-      0,
-      Math.ceil(((displayAuctionState?.consentDeadline || 0) - getSyncedTime()) / 1000),
-   );
+   // Perf: the consent-deadline ticker now lives in <ConsentGateCountdown>
+   // (a leaf that re-renders itself each second) instead of ticking this
+   // whole ~2000-line component every second while the gate is open.
 
    const handleConfirmConsent = async () => {
       if (isConsentBusy || !isConsentGate || iConsented) return;
@@ -296,6 +299,79 @@ const AuctionRoom = () => {
          setTimeout(() => setIsConsentBusy(false), 400);
       }
    };
+
+   // ── Admin lot controls: force-skip (no consent) + name-search recall ──
+   const [isForceSkipping, setIsForceSkipping] = useState(false);
+   const [showRecallPanel, setShowRecallPanel] = useState(false);
+   const [recallQuery, setRecallQuery] = useState('');
+   const [grantingUid, setGrantingUid] = useState(null);
+
+   // ── P2P voice (Option A): free WebRTC mesh over the room RTDB.
+   //    Step-out = leaveVoice(): audio links + mic close, the auction
+   //    listeners are untouched so you keep playing the whole time.
+   //    Solo/local rooms have no RTDB to signal over, so it stays off.
+   const voiceRtdb = !isSoloVsBots && serverReady && server ? getRtdb(server) : null;
+   const voice = useRoomVoice({
+      rtdb: voiceRtdb,
+      roomId: id,
+      uid: user?.uid,
+      displayName: user?.displayName || 'Manager',
+      enabled: Boolean(voiceRtdb && user?.uid),
+   });
+
+   const handleGrantAdmin = async (player) => {
+      if (!player || grantingUid) return;
+      setGrantingUid(player.id);
+      try {
+         await grantAdmin(id, player.id, player.name);
+      } catch (err) {
+         console.warn('[admin] grant failed', err);
+      } finally {
+         setTimeout(() => setGrantingUid(null), 400);
+      }
+   };
+
+   const handleForceSkip = async () => {
+      if (isForceSkipping || !isAdmin) return;
+      setIsForceSkipping(true);
+      try {
+         await skipLot(id);
+      } catch (err) {
+         console.warn('[admin] force skip failed', err);
+      } finally {
+         setTimeout(() => setIsForceSkipping(false), 500);
+      }
+   };
+
+   const handleRecall = async (playerIndex) => {
+      if (!isAdmin || playerIndex == null) return;
+      try {
+         await recallPlayer(id, playerIndex);
+      } catch (err) {
+         console.warn('[admin] recall failed', err);
+      }
+      setRecallQuery('');
+      setShowRecallPanel(false);
+   };
+
+   // Recall candidate list: players not yet sold (unsold or skipped) that are
+   // safe to pull back. Sold players are excluded unless already in recall
+   // (the panel only offers the ones still in the pool).
+   const recallCandidates = useMemo(() => {
+      const q = recallQuery.trim().toLowerCase();
+      if (q.length < 1) return [];
+      const soldIds = new Set(
+         (currentAuction?.players || [])
+            .filter((p) => p && p.team)
+            .map((p) => p.id)
+      );
+      const curId = displayAuctionState?.playerId;
+      return IPL_PLAYERS
+         .map((p, idx) => ({ ...p, index: idx }))
+         .filter((p) => p.id !== curId && !soldIds.has(p.id))
+         .filter((p) => p.name.toLowerCase().includes(q) || p.role?.toLowerCase().includes(q))
+         .slice(0, 6);
+   }, [recallQuery, currentAuction?.players, displayAuctionState?.playerId]);
 
    const configuredBidTimer = toFiniteNumber(currentAuction?.settings?.bidTimer, 10);
 
@@ -453,6 +529,34 @@ const AuctionRoom = () => {
          // Storage disabled / private mode
       }
    }, [isTtsEnabled, ttsSpeed, ttsPitch, selectedVoiceName]);
+
+   // ── Sound preferences: team anthems + gavel/countdown SFX (mutable) ──
+   const loadSavedSoundPrefs = () => {
+      if (typeof window === 'undefined') return { anthems: true, sfx: true };
+      try {
+         const raw = window.localStorage.getItem('thegavel_sound_prefs');
+         const p = raw ? JSON.parse(raw) : null;
+         return {
+            anthems: p ? p.anthems !== false : true,
+            sfx: p ? p.sfx !== false : true,
+         };
+      } catch {
+         return { anthems: true, sfx: true };
+      }
+   };
+   const [soundPrefs, setSoundPrefs] = useState(loadSavedSoundPrefs);
+   // Ref mirror so audio callbacks always read the latest prefs without
+   // re-creating every effect that depends on playBeep.
+   const soundPrefsRef = useRef(soundPrefs);
+   soundPrefsRef.current = soundPrefs;
+   useEffect(() => {
+      if (typeof window === 'undefined') return;
+      try {
+         window.localStorage.setItem('thegavel_sound_prefs', JSON.stringify(soundPrefs));
+      } catch {
+         // Storage disabled / private mode
+      }
+   }, [soundPrefs]);
 
    const lastSpokenPlayerIdRef = useRef(null);
    const lastSpokenBidRef = useRef(0);
@@ -660,7 +764,13 @@ const AuctionRoom = () => {
       };
    }, []);
 
-   const isAdmin = isSoloVsBots || currentAuction?.hostId === user?.uid;
+   // Admin = solo bot room, the original host, a granted (sticky) admin, or
+   // the currently-elected active admin (next available manager after the
+   // host went offline). Handover admins keep their role even when the host
+   // returns, so this stays sticky too.
+   const isHandoverAdmin = Boolean(currentAuction?.activeAdminId) && currentAuction.activeAdminId === user?.uid;
+   const isAdmin = isSoloVsBots || currentAuction?.hostId === user?.uid || Boolean(currentAuction?.admins?.[user?.uid]) || isHandoverAdmin;
+   const isHostBanner = isHandoverAdmin && currentAuction?.hostId !== user?.uid;
    const currentBid = displayAuctionState?.currentBid || 0;
    const nextBidAmount = getNextBidAmount(currentPlayer, currentBid);
    const playerCategories = useMemo(() => {
@@ -757,6 +867,7 @@ const AuctionRoom = () => {
    const audioCtxRef = useRef(null);
    const playBeep = useCallback((freq = 440, duration = 0.1) => {
       if (displayAuctionState?.status === 'paused') return;
+      if (!soundPrefsRef.current.sfx) return;
       try {
          if (!audioCtxRef.current) {
             audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -852,35 +963,40 @@ const AuctionRoom = () => {
             };
             const colors = teamId && colorMap[teamId] ? colorMap[teamId] : ['#FFD700', '#FFA500', '#FF4500'];
 
-            // High-performance smooth confetti bursts (avoids frame drops on mobile/laptop)
+            // Perf: on phones a full-screen canvas confetti storm hitches the
+            // frame exactly when the gavel lands — the worst moment. Keep the
+            // single light burst; desktops get the celebratory side cannons.
+            const isPhone = window.matchMedia('(max-width: 767px)').matches;
             confetti({
-               particleCount: 50,
+               particleCount: isPhone ? 20 : 50,
                spread: 70,
                origin: { y: 0.6 },
                colors: colors,
-               scalar: 1.1,
+               scalar: isPhone ? 0.7 : 1.1,
                disableForReducedMotion: true
             });
-            setTimeout(() => {
-               confetti({
-                  particleCount: 35,
-                  angle: 60,
-                  spread: 50,
-                  origin: { x: 0.05, y: 0.65 },
-                  colors: colors,
-                  disableForReducedMotion: true
-               });
-               confetti({
-                  particleCount: 35,
-                  angle: 120,
-                  spread: 50,
-                  origin: { x: 0.95, y: 0.65 },
-                  colors: colors,
-                  disableForReducedMotion: true
-               });
-            }, 200);
+            if (!isPhone) {
+               setTimeout(() => {
+                  confetti({
+                     particleCount: 35,
+                     angle: 60,
+                     spread: 50,
+                     origin: { x: 0.05, y: 0.65 },
+                     colors: colors,
+                     disableForReducedMotion: true
+                  });
+                  confetti({
+                     particleCount: 35,
+                     angle: 120,
+                     spread: 50,
+                     origin: { x: 0.95, y: 0.65 },
+                     colors: colors,
+                     disableForReducedMotion: true
+                  });
+               }, 200);
+            }
 
-            if (teamId && TEAM_SONGS[teamId.toLowerCase()]) {
+            if (soundPrefsRef.current.anthems && teamId && TEAM_SONGS[teamId.toLowerCase()]) {
                if (!celebrationAudioRef.current) celebrationAudioRef.current = new Audio();
                const audio = celebrationAudioRef.current;
                try {
@@ -900,32 +1016,34 @@ const AuctionRoom = () => {
          if (lastHandledSoundStatusRef.current !== currentKey) {
             lastHandledSoundStatusRef.current = currentKey;
 
-            const unsoldAudios = ['/unsold1.mpeg'];
-            const randomAudio = unsoldAudios[Math.floor(Math.random() * unsoldAudios.length)];
-            const audio = celebrationAudioRef.current;
+            if (soundPrefsRef.current.anthems) {
+               const unsoldAudios = ['/unsold1.mpeg'];
+               const randomAudio = unsoldAudios[Math.floor(Math.random() * unsoldAudios.length)];
+               const audio = celebrationAudioRef.current;
 
-            if (audio) {
-               try {
-                  audio.pause();
-                  audio.src = randomAudio;
-                  audio.volume = 0.7;
-                  const playPromise = audio.play();
-                  if (playPromise !== undefined) {
-                     playPromise.catch(() => {
-                        // Mobile fallback Audio object
-                        if (fallbackAudioRef.current) {
-                           fallbackAudioRef.current.pause();
-                        }
-                        const fallbackAudio = new Audio(randomAudio);
-                        fallbackAudio.volume = 0.7;
-                        fallbackAudioRef.current = fallbackAudio;
-                        fallbackAudio.play().catch(() => {
-                           // Autoplay can be blocked until a user gesture; non-fatal.
+               if (audio) {
+                  try {
+                     audio.pause();
+                     audio.src = randomAudio;
+                     audio.volume = 0.7;
+                     const playPromise = audio.play();
+                     if (playPromise !== undefined) {
+                        playPromise.catch(() => {
+                           // Mobile fallback Audio object
+                           if (fallbackAudioRef.current) {
+                              fallbackAudioRef.current.pause();
+                           }
+                           const fallbackAudio = new Audio(randomAudio);
+                           fallbackAudio.volume = 0.7;
+                           fallbackAudioRef.current = fallbackAudio;
+                           fallbackAudio.play().catch(() => {
+                              // Autoplay can be blocked until a user gesture; non-fatal.
+                           });
                         });
-                     });
+                     }
+                  } catch (e) {
+                     console.warn('[auction audio] Unsold playback failed', e);
                   }
-               } catch (e) {
-                  console.warn('[auction audio] Unsold playback failed', e);
                }
             }
          }
@@ -1204,7 +1322,9 @@ const AuctionRoom = () => {
       <div ref={bindRoomShell} className="auction-room-shell max-md:fixed max-md:inset-0 md:relative md:h-screen-safe bg-[#000000] text-white font-sans flex flex-col items-center overflow-hidden selection:bg-white/20 selection:text-white">
          <PageBackground showArt={false} />
 
-         <header className="w-full h-14 compact:h-12 bg-[#0c0d10] backdrop-blur-md border-b border-white/10 flex flex-row items-center justify-between px-2.5 sm:px-4 md:px-6 z-50 gap-2 shrink-0">
+         {/* Perf: opaque header — a backdrop-blur bar re-renders on every scroll
+            frame on iOS; the room is already a dark solid surface. */}
+         <header className="w-full h-14 compact:h-12 bg-[#0c0d10] border-b border-white/10 flex flex-row items-center justify-between px-2.5 sm:px-4 md:px-6 z-50 gap-2 shrink-0">
             <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">
                <div className="flex items-center gap-1">
                   <span className="text-slate-500 text-[8px] sm:text-[10px] compact:text-[9px] font-black uppercase tracking-widest hidden xs:inline">ID:</span>
@@ -1295,9 +1415,44 @@ const AuctionRoom = () => {
                      >
                         <Users size={13} /> <span className="hidden md:inline">Participants</span>
                      </button>
+                     {/* Host: skip the current lot immediately, no manager consent needed */}
+                     <button
+                        onClick={handleForceSkip}
+                        disabled={isForceSkipping || displayAuctionState?.status === 'completed'}
+                        className="p-1 sm:px-2.5 sm:py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 text-[10px] compact:text-[9px] font-black uppercase tracking-widest hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1"
+                        title="Host: skip this player now without waiting for everyone's consent"
+                     >
+                        {isForceSkipping ? <Loader2 size={13} className="animate-spin" /> : <Ban size={13} />} <span className="hidden md:inline">Skip</span>
+                     </button>
+                     {/* Host: pull a skipped / passed / unsold player back by name search */}
+                     <button
+                        onClick={() => { setShowRecallPanel((v) => !v); setRecallQuery(''); }}
+                        disabled={displayAuctionState?.status === 'completed'}
+                        className="p-1 sm:px-2.5 sm:py-1.5 bg-sky-500/10 border border-sky-500/20 rounded-lg text-sky-300 text-[10px] compact:text-[9px] font-black uppercase tracking-widest hover:bg-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1"
+                        title="Host: get a player back by searching their name"
+                     >
+                        <Search size={13} /> <span className="hidden md:inline">Recall</span>
+                     </button>
                   </div>
                )}
                <div className="flex items-center gap-1 border-l border-white/10 pl-1.5 sm:pl-3">
+                  {/* P2P voice: join the room talk while you keep playing;
+                      the panel lets you step out (mic closes, game stays on). */}
+                  {!isSoloVsBots && user?.uid && (
+                     <button
+                        onClick={async () => {
+                           if (voice.inVoice) voice.leaveVoice();
+                           else await voice.joinVoice();
+                        }}
+                        className={`p-1 sm:p-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${voice.inVoice ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.25)]' : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white'}`}
+                        title={voice.inVoice ? 'Step out of voice (keep playing)' : 'Join room voice (keep playing)'}
+                     >
+                        <Mic size={14} />
+                        <span className="hidden md:inline text-[9px] font-black uppercase tracking-widest">
+                           {voice.inVoice ? `Talking · ${voice.talkingCount + 1}` : 'Voice'}
+                        </span>
+                     </button>
+                  )}
                   <button
                      onClick={() => setShowSettings(!showSettings)}
                      className={`p-1 sm:p-1.5 rounded-lg border transition-all cursor-pointer ${showSettings ? 'bg-white/10 border-white/20 text-white shadow-sm' : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white'}`}
@@ -1310,8 +1465,166 @@ const AuctionRoom = () => {
             </div>
          </header>
 
-         <div className="w-full flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden relative pb-[max(4.5rem,calc(3.75rem+env(safe-area-inset-bottom)))] md:pb-0">
-            <aside className={`${mobileTab === 'squad' ? 'flex' : 'hidden'} md:flex flex-1 md:flex-none md:shrink-0 w-full md:w-56 lg:w-64 xl:w-80 bg-[#0c0d10]/90 backdrop-blur-xl border-r border-white/10 flex-col h-full overflow-hidden relative z-10`}>
+         {/* Admin handover banner: shown when the original host is offline and
+             this manager was auto-elevated to run the room. */}
+         {isHostBanner && (
+            <div className="relative z-30 mx-3 sm:mx-6 mt-1 sm:mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 sm:px-4 py-2.5 flex items-center gap-2.5 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+               <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+                  <Crown size={15} className="text-amber-300" />
+               </div>
+               <div className="min-w-0 flex-1">
+                  <p className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-amber-300 leading-tight">You're the new host</p>
+                  <p className="text-[9px] sm:text-[10px] font-bold text-amber-200/70 leading-tight mt-0.5">
+                     The original host stepped out, so admin is on you now. They keep admin when they return — both of you can run the room.
+                  </p>
+               </div>
+            </div>
+         )}
+
+         {/* Host recall panel: name-search any unsold / skipped / passed player
+             and pull them straight back into the order. Anchored under the
+             header; closes on tap-out or selecting a player. */}
+         {isAdmin && showRecallPanel && (
+            <div
+               className="relative z-40 mx-3 sm:mx-6 my-1 rounded-2xl border border-sky-500/25 bg-[#0c0d10] shadow-[0_18px_50px_rgba(0,0,0,0.55)] overflow-hidden"
+            >
+               <div className="flex items-center gap-2 px-3 sm:px-4 py-2.5 border-b border-white/5 bg-sky-500/[0.06]">
+                  <Search size={14} className="text-sky-300 shrink-0" />
+                  <input
+                     autoFocus
+                     type="text"
+                     value={recallQuery}
+                     onChange={(e) => setRecallQuery(e.target.value)}
+                     placeholder="Search a player to pull back into the auction…"
+                     className="flex-1 min-w-0 bg-transparent text-[12px] sm:text-[13px] font-bold text-slate-100 placeholder:text-slate-500 placeholder:font-medium focus:outline-none"
+                  />
+                  <button
+                     onClick={() => { setShowRecallPanel(false); setRecallQuery(''); }}
+                     className="p-1.5 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white transition-colors cursor-pointer"
+                     title="Close recall panel"
+                  >
+                     <X size={14} />
+                  </button>
+               </div>
+               <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                  {recallQuery.trim() === '' ? (
+                     <p className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                        Type a name to find unsold or skipped players
+                     </p>
+                  ) : recallCandidates.length === 0 ? (
+                     <p className="px-4 py-4 text-[11px] font-bold text-slate-500">
+                        No available players match “{recallQuery}” — they may already be sold.
+                     </p>
+                  ) : (
+                     recallCandidates.map((p) => (
+                        <button
+                           key={p.id}
+                           onClick={() => handleRecall(p.index)}
+                           className="w-full flex items-center gap-3 px-3 sm:px-4 py-2.5 border-b border-white/5 last:border-b-0 hover:bg-sky-500/[0.08] transition-colors text-left cursor-pointer"
+                        >
+                           <div className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 overflow-hidden shrink-0">
+                              <img
+                                 src={p.image}
+                                 alt=""
+                                 className="w-full h-full object-cover"
+                                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              />
+                           </div>
+                           <div className="min-w-0 flex-1">
+                              <p className="text-[12px] sm:text-[13px] font-black text-white truncate">{p.name}</p>
+                              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{p.role} · Base ₹{formatCrores(p.basePrice, 1)}</p>
+                           </div>
+                           <UserPlus size={15} className="text-sky-400 shrink-0" />
+                        </button>
+                     ))
+                  )}
+               </div>
+            </div>
+         )}
+
+         {/* P2P voice panel: compact floating card with step-out, mic-mute,
+             raise-hand, and live talking bars. Stays out of the way of the
+             bid controls; closing it = stepping out of voice only, the
+             auction keeps running underneath the whole time. */}
+         {!isSoloVsBots && user?.uid && voice.inVoice && (
+            <div className="fixed top-16 sm:top-18 right-3 z-[90] w-[calc(100%-1.5rem)] max-w-[300px] rounded-2xl border border-emerald-500/25 bg-[#0c0d10] shadow-[0_18px_50px_rgba(0,0,0,0.6)] overflow-hidden">
+               <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-emerald-500/[0.07]">
+                  <div className="flex items-center gap-2">
+                     <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+                     </span>
+                     <span className="text-[9px] font-pixel uppercase tracking-widest text-emerald-300">Room voice</span>
+                     <span className="text-[8px] font-bold text-gray-500 uppercase">in</span>
+                  </div>
+                  <button
+                     onClick={() => voice.leaveVoice()}
+                     className="p-1.5 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white transition-colors cursor-pointer"
+                     title="Step out of voice (keep playing)"
+                  >
+                     <PhoneOff size={13} />
+                  </button>
+               </div>
+
+               {voice.voiceError && (
+                  <p className="px-3 py-2 text-[9px] font-bold text-amber-400 bg-amber-500/10 border-b border-amber-500/20">{voice.voiceError}</p>
+               )}
+
+               {/* Live peer list with talking + mute + raise-hand indicators */}
+               <div className="max-h-40 overflow-y-auto custom-scrollbar">
+                  {voice.peerIds.length === 0 ? (
+                     <p className="px-3 py-2.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest text-center">
+                        No one else in voice yet — share the room link
+                     </p>
+                  ) : (
+                     voice.peerIds.map((k) => {
+                        const p = voice.peers[k];
+                        const bad = p?.connected && (p.connected === 'disconnected' || p.connected === 'failed' || p.connected === 'closed');
+                        return (
+                           <div key={k} className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-white/5 last:border-b-0">
+                              <div className="min-w-0 flex items-center gap-1.5">
+                                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${p?.speaking ? 'bg-emerald-400' : p?.muted ? 'bg-amber-500' : 'bg-gray-500'}`} />
+                                 <span className="text-[11px] font-bold text-slate-200 truncate">{p?.name || 'Manager'}</span>
+                                 {p?.raisedHand && <Hand size={11} className="text-amber-400 shrink-0" />}
+                                 {p?.muted && <MicOff size={10} className="text-gray-500 shrink-0" />}
+                              </div>
+                              <span className={`text-[7px] font-black uppercase tracking-wider shrink-0 ${bad ? 'text-red-400' : p?.speaking ? 'text-emerald-400' : 'text-gray-500'}`}>
+                                 {bad ? 'unreachable' : p?.speaking ? 'talking' : p?.connected === 'new' ? 'connecting' : 'in'}
+                              </span>
+                           </div>
+                        );
+                     })
+                  )}
+               </div>
+
+               {/* Own controls */}
+               <div className="flex items-center justify-center gap-2 px-3 py-2.5 border-t border-white/5 bg-black/30">
+                  <button
+                     onClick={voice.toggleMute}
+                     className={`w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-95 cursor-pointer ${voice.micMuted ? 'bg-red-500/20 border border-red-500/40 text-red-300' : 'bg-white/10 border border-white/15 text-slate-200'}`}
+                     title={voice.micMuted ? 'Unmute mic' : 'Mute mic'}
+                  >
+                     {voice.micMuted ? <MicOff size={17} /> : <Mic size={17} />}
+                  </button>
+                  <button
+                     onClick={voice.toggleRaiseHand}
+                     className={`w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-95 cursor-pointer ${voice.raisedHand ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300' : 'bg-white/10 border border-white/15 text-slate-200'}`}
+                     title={voice.raisedHand ? 'Lower hand' : 'Raise hand'}
+                  >
+                     <Hand size={17} />
+                  </button>
+                  <button
+                     onClick={() => voice.leaveVoice()}
+                     className="px-3 h-11 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+                  >
+                     <PhoneOff size={12} /> Step out
+                  </button>
+               </div>
+            </div>
+         )}
+
+         <div className="w-full flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden relative pb-[max(7rem,calc(6.25rem+env(safe-area-inset-bottom)))] md:pb-0">
+            <aside className={`${mobileTab === 'squad' ? 'flex' : 'hidden'} md:flex flex-1 md:flex-none md:shrink-0 w-full md:w-56 lg:w-64 xl:w-80 bg-[#0c0d10]/95 border-r border-white/10 flex-col h-full overflow-hidden relative z-10`}>
                <div className="h-14 compact:h-12 border-b border-white/10 bg-[#0c0d10] flex items-center px-6 shrink-0">
                   <span className="text-[10px] compact:text-[9px] font-pixel text-slate-400 uppercase tracking-widest leading-none">Auction Teams</span>
                </div>
@@ -1507,7 +1820,7 @@ const AuctionRoom = () => {
                                               />
                                            </div>
                                            <p className="text-[10px] text-gray-500 mt-1.5">
-                                              Auto-advances in <span className="font-pixel text-amber-400">{consentRemainingSec}s</span> if everyone doesn’t confirm
+                                              Auto-advances in <ConsentGateCountdown deadline={displayAuctionState?.consentDeadline} getSyncedTime={getSyncedTime} /> if everyone doesn’t confirm
                                            </p>
                                         </div>
 
@@ -1842,7 +2155,9 @@ const AuctionRoom = () => {
                </div>
             </div>
             {/* 5. Squad / OS / Purse & 6. Sticky Action bar */}
-            <div className="bg-[#0a0b0e]/95 backdrop-blur-md border-t border-white/10 p-2.5 sm:p-4 xl:p-6 flex flex-col gap-2.5 sm:gap-3 sticky bottom-0 z-20 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+            {/* Opaque on mobile: a blurred sticky bar re-renders on every
+                scroll frame on iOS — the room surface is already solid dark. */}
+            <div className="bg-[#0a0b0e]/95 md:backdrop-blur-md md:bg-[#0a0b0e]/60 border-t border-white/10 p-2.5 sm:p-4 xl:p-6 flex flex-col gap-2.5 sm:gap-3 sticky bottom-0 z-20 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
                                     {/* Franchise Quick Stats Bar right above Bid button (Mobile view only) */}
                                     {team && (() => {
                                        const osCount = countOverseas(team.squad, IPL_PLAYERS);
@@ -1978,7 +2293,7 @@ const AuctionRoom = () => {
                </main>
             </div>
 
-            <aside className={`${(mobileTab === 'activity' || mobileTab === 'chat') ? 'flex' : 'hidden'} md:flex flex-1 md:flex-none md:shrink-0 w-full md:w-64 lg:w-72 xl:w-96 bg-[#0c0d10]/90 backdrop-blur-xl border-l border-white/10 flex-col h-full overflow-hidden relative z-10`}>
+            <aside className={`${(mobileTab === 'activity' || mobileTab === 'chat') ? 'flex' : 'hidden'} md:flex flex-1 md:flex-none md:shrink-0 w-full md:w-64 lg:w-72 xl:w-96 bg-[#0c0d10]/95 border-l border-white/10 flex-col h-full overflow-hidden relative z-10`}>
                {/* Premium Tabs Header */}
                <div className="h-14 compact:h-12 bg-[#0c0d10] border-b border-white/10 flex items-center shrink-0 w-full">
                   <button
@@ -2125,8 +2440,58 @@ const AuctionRoom = () => {
             </aside>
          </div>
 
+         {/* Mobile Live-Bid Ticker: compact always-on strip above the tab bar.
+             Players no longer need to switch to the Arena tab to see the
+             current price — it follows them across Squads/Logs/Chat.
+             Opaque (no backdrop-blur): sits above scrolling content on iOS. */}
+         {currentAuction?.status === 'active' && displayAuctionState && (
+            <button
+               type="button"
+               onClick={() => setMobileTab('arena')}
+               className="fixed inset-x-0 w-full md:hidden z-40 h-10 border-t border-white/10 bg-[#0c0d10] flex items-center gap-2.5 px-3 cursor-pointer text-left"
+               style={{ bottom: 'calc(3.5rem + max(0.75rem, env(safe-area-inset-bottom)))' }}
+               aria-label="Jump to live auction — current bid"
+            >
+               <div className="w-7 h-7 rounded-lg bg-white/10 border border-white/10 overflow-hidden shrink-0">
+                  {currentPlayer?.image ? (
+                     <img
+                        src={currentPlayer.image}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                     />
+                  ) : null}
+               </div>
+               <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                     <span className="text-[9px] font-pixel uppercase tracking-wider text-white truncate">{currentPlayer?.name || '—'}</span>
+                     <span className={`shrink-0 px-1.5 py-0.5 rounded font-pixel text-[7px] uppercase tracking-wider ${
+                        displayAuctionState.status === 'bidding' || displayAuctionState.status === 'paused'
+                           ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                           : displayAuctionState.status === 'awaiting_consent'
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                              : displayAuctionState.status === 'sold'
+                                 ? 'bg-green-500/15 text-green-400 border border-green-500/30'
+                                 : 'bg-red-500/15 text-red-400 border border-red-500/30'
+                     }`}>
+                        {displayAuctionState.status === 'bidding' || displayAuctionState.status === 'paused'
+                           ? 'Live'
+                           : displayAuctionState.status === 'awaiting_consent'
+                              ? 'Consent'
+                              : displayAuctionState.status}
+                     </span>
+                  </div>
+                  <p className="text-[7px] font-bold uppercase tracking-widest text-gray-500">Tap to open arena</p>
+               </div>
+               <div className="text-right shrink-0">
+                  <p className="text-[7px] font-bold uppercase tracking-widest text-gray-500">{displayAuctionState.status === 'unsold' ? 'Unsold' : 'Price'}</p>
+                  <p className="text-[11px] font-pixel text-ipl-gold leading-tight">₹{formatCrores(displayAuctionState?.currentBid || 0)}</p>
+               </div>
+            </button>
+         )}
+
          {/* Mobile Bottom Navigation Bar: fixed to bottom on mobile screens, hidden on laptop/desktop */}
-         <div className="fixed bottom-0 inset-x-0 w-full bg-[#0c0d10]/95 backdrop-blur-2xl border-t border-white/10 flex md:hidden z-50 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+         <div className="fixed bottom-0 inset-x-0 w-full bg-[#0c0d10] border-t border-white/10 flex md:hidden z-50 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <div className="flex w-full h-14 items-center justify-around px-2 sm:px-4">
                <button onClick={() => setMobileTab('squad')} className={`flex flex-col items-center justify-center w-14 sm:w-16 gap-0.5 transition-all duration-300 ${mobileTab === 'squad' ? 'text-white translate-y-0' : 'text-gray-500 hover:text-gray-400 translate-y-0.5'}`}>
                   <div className={`p-1 rounded-lg transition-colors duration-300 ${mobileTab === 'squad' ? 'bg-white/10 text-white' : 'bg-transparent text-gray-400'}`}>
@@ -2443,6 +2808,46 @@ const AuctionRoom = () => {
                            </div>
                         )}
                      </div>
+
+                     {/* Sound Preferences: team anthems + gavel/countdown SFX */}
+                     <div className="bg-white/[0.02] border border-white/10 p-4 rounded-2xl space-y-4">
+                        <div className="flex items-center justify-between pb-3 border-b border-white/5">
+                           <div>
+                              <span className="text-[10px] font-black text-slate-300 uppercase tracking-wider block">Sound</span>
+                              <span className="text-[8px] font-bold text-gray-500 uppercase tracking-widest">Mute anthems &amp; gavel beeps</span>
+                           </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3">
+                           <span className="text-[9px] font-bold text-gray-300 uppercase tracking-wider">Team anthems &amp; jingles</span>
+                           <button
+                              onClick={() => setSoundPrefs(p => ({ ...p, anthems: !p.anthems }))}
+                              className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-300 cursor-pointer shrink-0 ${soundPrefs.anthems ? 'bg-slate-300' : 'bg-white/10'}`}
+                              aria-pressed={soundPrefs.anthems}
+                           >
+                              <motion.div
+                                 layout
+                                 transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                                 className={`w-4 h-4 rounded-full bg-black shadow-md ${soundPrefs.anthems ? 'ml-5' : 'ml-0'}`}
+                              />
+                           </button>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3">
+                           <span className="text-[9px] font-bold text-gray-300 uppercase tracking-wider">Gavel &amp; countdown beeps</span>
+                           <button
+                              onClick={() => setSoundPrefs(p => ({ ...p, sfx: !p.sfx }))}
+                              className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-300 cursor-pointer shrink-0 ${soundPrefs.sfx ? 'bg-slate-300' : 'bg-white/10'}`}
+                              aria-pressed={soundPrefs.sfx}
+                           >
+                              <motion.div
+                                 layout
+                                 transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                                 className={`w-4 h-4 rounded-full bg-black shadow-md ${soundPrefs.sfx ? 'ml-5' : 'ml-0'}`}
+                              />
+                           </button>
+                        </div>
+                     </div>
                   </div>
                </motion.div>
             </div>
@@ -2461,19 +2866,46 @@ const AuctionRoom = () => {
                         <button onClick={() => setShowParticipantsOverlay(false)} className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-gray-400 hover:bg-red-500 transition-all cursor-pointer"><X size={20} /></button>
                      </div>
                      <div className="space-y-3 overflow-y-auto pr-1 custom-scrollbar max-h-[calc(90vh-100px)] touch-pan-y">
-                        {(currentAuction.players || []).map((player) => (
-                           <div key={player.id} className="bg-white/[0.02] border border-white/10 p-4 rounded-2xl flex items-center justify-between group">
-                              <div className="flex items-center gap-4">
-                                 <div className={`w-12 h-12 rounded-2xl bg-white/5 border border-white/10 p-1.5 flex items-center justify-center`}>
-                                    <img src={TEAMS.find(t => t.id === player.team)?.logo} alt="Player Team Logo" className="w-full h-full object-contain" />
+                        {(currentAuction.players || []).map((player) => {
+                           const playerIsAdmin = player.isHost || Boolean(currentAuction?.admins?.[player.id]);
+                           const canGrant = (isAdmin || isHostBanner) && player.id !== user?.uid && !player.isBot;
+                           return (
+                              <div key={player.id} className="bg-white/[0.02] border border-white/10 p-4 rounded-2xl flex items-center justify-between gap-2 group">
+                                 <div className="flex items-center gap-4 min-w-0">
+                                    <div className={`w-12 h-12 rounded-2xl bg-white/5 border border-white/10 p-1.5 flex items-center justify-center shrink-0`}>
+                                       <img src={TEAMS.find(t => t.id === player.team)?.logo} alt="Player Team Logo" className="w-full h-full object-contain" />
+                                    </div>
+                                    <div className="min-w-0">
+                                       <h5 className="text-sm font-black uppercase flex items-center gap-2">
+                                          <span className="truncate">{player.name}</span>
+                                          {player.isHost && <span className="px-1.5 py-0.5 bg-white/10 text-slate-300 border border-white/10 font-pixel text-[8px] rounded-md shrink-0">HOST</span>}
+                                          {playerIsAdmin && !player.isHost && <span className="px-1.5 py-0.5 bg-amber-500/15 text-amber-300 border border-amber-500/25 font-pixel text-[8px] rounded-md shrink-0">ADMIN</span>}
+                                          {currentAuction?.activeAdminId === player.id && !player.isHost && <Crown size={11} className="text-amber-400 shrink-0" />}
+                                       </h5>
+                                       <p className="text-[10px] font-bold text-gray-500 uppercase truncate">{TEAMS.find(t => t.id === player.team)?.name || player.team || player.teamName}</p>
+                                    </div>
                                  </div>
-                                 <div><h5 className="text-sm font-black uppercase flex items-center gap-2">{player.name}{player.isHost && <span className="px-1.5 py-0.5 bg-white/10 text-slate-300 border border-white/10 font-pixel text-[8px] rounded-md">HOST</span>}</h5><p className="text-[10px] font-bold text-gray-500 uppercase">{TEAMS.find(t => t.id === player.team)?.name || player.team || player.teamName}</p></div>
+                                 <div className="flex items-center gap-1.5 shrink-0">
+                                    {/* Host grants admin to any manager (sticky — they keep it even when the host returns) */}
+                                    {canGrant && !playerIsAdmin && (
+                                       <button
+                                          onClick={() => handleGrantAdmin(player)}
+                                          disabled={grantingUid === player.id}
+                                          className="flex items-center gap-1 px-2.5 py-2 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/25 text-sky-300 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-50 cursor-pointer"
+                                          title="Grant admin (sticky — they become co-admin; both keep it)"
+                                       >
+                                          {grantingUid === player.id ? <Loader2 size={11} className="animate-spin" /> : <UserPlus size={11} />}
+                                          <span className="hidden sm:inline">Grant Admin</span>
+                                       </button>
+                                    )}
+                                    {playerIsAdmin && !player.isHost && <span className="hidden sm:inline text-[8px] font-black uppercase tracking-wider text-amber-400/70">co-admin</span>}
+                                    {!player.isHost && (
+                                       <button onClick={async () => { if (window.confirm(`Are you sure you want to kick ${player.name}?`)) { try { await kickPlayer(id, player); } catch { setError('Failed to remove that manager. Please try again.'); setTimeout(() => setError(''), 3000); } } }} className="px-3 sm:px-4 py-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer">Kick</button>
+                                    )}
+                                 </div>
                               </div>
-                              {!player.isHost && (
-                                 <button onClick={async () => { if (window.confirm(`Are you sure you want to kick ${player.name}?`)) { try { await kickPlayer(id, player); } catch { setError('Failed to remove that manager. Please try again.'); setTimeout(() => setError(''), 3000); } } }} className="px-4 py-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all opacity-0 group-hover:opacity-100 cursor-pointer">Kick Player</button>
-                              )}
-                           </div>
-                        ))}
+                           );
+                        })}
                      </div>
                   </div>
                </motion.div>

@@ -25,11 +25,11 @@ import {
   Loader2,
   AlertCircle,
   Sparkles,
-  CalendarDays,
 } from 'lucide-react';
 import LeagueScheduleTab from '../components/league/LeagueScheduleTab';
 import { motion, AnimatePresence } from 'framer-motion';
 import SquadRating from '../components/SquadRating';
+import NotionTeamSheet from '../components/NotionTeamSheet';
 import PageLoader from '../components/PageLoader';
 import useRoomServer from '../hooks/useRoomServer';
 import useDocumentTitle from '../hooks/useDocumentTitle';
@@ -53,7 +53,7 @@ const AuctionSummary = () => {
   const { user } = useAuth();
   const { handleFirebaseError } = useQuota();
   
-  const [activeTab, setActiveTab] = useState('squads');
+  const [activeTab, setActiveTab] = useState('sheet');
   const [expandedTeam, setExpandedTeam] = useState(null);
   const [sharingTeamId, setSharingTeamId] = useState(null);
   const [copiedTeamId, setCopiedTeamId] = useState(null);
@@ -449,8 +449,8 @@ const AuctionSummary = () => {
 
         {/* Tab Navigation */}
         <div className="mb-6 sm:mb-12">
-          <div className="bg-[#0c0d10] backdrop-blur-3xl p-1 sm:p-1.5 rounded-2xl border border-white/10 grid grid-cols-2 sm:grid-cols-4 sm:flex sm:justify-center gap-1 sm:gap-2 max-w-full sm:max-w-max mx-auto shadow-2xl">
             {[
+              { id: 'sheet', label: 'Sheet', fullLabel: 'Team Sheet', icon: FileText },
               { id: 'squads', label: 'Squads', fullLabel: 'Team Squads', icon: Users },
               { id: 'leaderboard', label: 'Top 5', fullLabel: 'Top Expensive', icon: Trophy },
               { id: 'fantasy', label: 'Ratings', fullLabel: 'Squad Ratings', icon: Sparkles },
@@ -475,7 +475,21 @@ const AuctionSummary = () => {
 
         {/* Content Section */}
         <AnimatePresence mode="wait">
-          {activeTab === 'leaderboard' ? (
+          {activeTab === 'sheet' ? (
+            <motion.section
+              key="sheet"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              className="pb-6"
+            >
+              <NotionTeamSheet
+                roomTeams={activeTeams}
+                auction={activeAuction}
+                topPlayers={topPlayers}
+              />
+            </motion.section>
+          ) : activeTab === 'leaderboard' ? (
             <motion.section
               key="leaderboard"
               initial={{ opacity: 0, scale: 0.95 }}

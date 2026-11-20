@@ -316,6 +316,16 @@ export const AuctionProvider = ({ children }) => {
         lastSeen: serverTimestampRtdb()
       });
 
+      // Seed the sticky admin roster (host is admin #1). Best-effort: rooms
+      // created before this ship still work via the hostId fallback.
+      try {
+        await set(ref(rtdb, `auctions/${roomId}/admins`), {
+          [userId]: { at: Date.now(), via: 'host' }
+        });
+      } catch {
+        // Admins node unavailable (rules not deployed yet) — hostId still governs.
+      }
+
       if (playerDetails.team) {
         const rtdbTeamRef = ref(rtdb, `auctions/${roomId}/teams/${roomId}_${userId}`);
         await set(rtdbTeamRef, {
@@ -1281,6 +1291,152 @@ export const AuctionProvider = ({ children }) => {
   }, [currentAuction?.server, getSyncedTime, handleFirebaseError]);
 
   /**
+   * Host-only force skip: resolve the current lot immediately and advance,
+   * WITHOUT waiting for manager consensus (bypasses the pass-vote tally and,
+   * while gated, the consent wait). bidding → sell to the live high bidder
+   * (or bots) / unsold; sold/unsold/awaiting_consent → advance at once.
+   */
+  const skipLot = useCallback(async (roomId) => {
+    if (!roomId) return;
+
+    if (isLocalRoom(roomId, currentAuction?.server)) {
+      const live = currentAuction?.currentAuction || currentAuction?.currentLot;
+      if (live?.status === 'awaiting_consent') {
+        updateLocalSoloState({ type: 'CONSENT_FORCE', now: Date.now() });
+      } else if (live?.status === 'sold' || live?.status === 'unsold') {
+        updateLocalSoloState({ type: 'ADVANCE_LOT', now: Date.now() });
+      } else {
+        updateLocalSoloState({ type: 'SKIP_LOT', now: Date.now() });
+      }
+      return;
+    }
+
+    const server = normalizeServer(currentAuction?.server || getActiveServer());
+    const rtdbInstance = getRtdb(server);
+    const liveRef = ref(rtdbInstance, `auctions/${roomId}/live`);
+    const roomRef = ref(rtdbInstance, `auctions/${roomId}/room`);
+
+    try {
+      const [liveSnap, roomSnap] = await Promise.all([get(liveRef), get(roomRef)]);
+      const live = liveSnap.val();
+      if (!live) return;
+      const room = roomSnap.exists() ? roomSnap.val() : {};
+
+      if (live.status === 'sold' || live.status === 'unsold' || live.status === 'awaiting_consent') {
+        await advanceCloudLot(server, roomId, room, live);
+      } else if (live.status === 'bidding') {
+        await passCurrentLot(roomId);
+      }
+      await push(ref(rtdbInstance, `auctions/${roomId}/messages`), {
+        userId: 'system',
+        userName: 'System',
+        text: `Host skipped ${IPL_PLAYERS.find(p => p.id === live.playerId)?.name || 'the player'} without waiting for manager votes.`,
+        type: 'log',
+        timestamp: serverTimestampRtdb(),
+      }).catch(() => {});
+    } catch (err) {
+      handleFirebaseError(err);
+    }
+  }, [currentAuction?.server, currentAuction?.currentAuction, currentAuction?.currentLot, advanceCloudLot, passCurrentLot, handleFirebaseError, updateLocalSoloState]);
+
+  /**
+   * Host "get the player back": re-insert any player (skipped, passed, or
+   * already sold) into the auction order immediately after the current lot,
+   * so they get re-bid on. Works from name-search in the admin recall panel.
+   * In solo rooms it routes through the local reducer; in cloud rooms it
+   * rewrites the host-only playerOrder nodes and, when the current lot is
+   * already resolved, starts the recalled lot immediately.
+   */
+  const recallPlayer = useCallback(async (roomId, playerIndex) => {
+    const player = IPL_PLAYERS[playerIndex];
+    if (playerIndex == null || !player) return;
+
+    if (isLocalRoom(roomId, currentAuction?.server)) {
+      updateLocalSoloState({ type: 'RECALL_PLAYER', playerIndex, now: Date.now() });
+      return;
+    }
+
+    const server = normalizeServer(currentAuction?.server || getActiveServer());
+    const rtdbInstance = getRtdb(server);
+    const roomRef = ref(rtdbInstance, `auctions/${roomId}/room`);
+    const liveRef = ref(rtdbInstance, `auctions/${roomId}/live`);
+
+    try {
+      const [roomSnap, liveSnap] = await Promise.all([get(roomRef), get(liveRef)]);
+      const live = liveSnap.val();
+      if (!live) return;
+      const room = roomSnap.exists() ? roomSnap.val() : {};
+      const fullOrder = Array.from({ length: IPL_PLAYERS.length }, (_, i) => i);
+      const baseOrder = Array.isArray(room.playerOrder) && room.playerOrder.length > 0
+        ? room.playerOrder
+        : fullOrder;
+
+      // Drop any existing occurrences of this player, re-insert right after
+      // the current lot's position (or at the end if the auction is finished).
+      const cleaned = baseOrder.filter((i) => i !== playerIndex);
+      const curIdx = cleaned.findIndex((i) => IPL_PLAYERS[i] && IPL_PLAYERS[i].id === live.playerId);
+      const insertAt = curIdx >= 0 ? curIdx + 1 : cleaned.length;
+      const newOrder = [...cleaned.slice(0, insertAt), playerIndex, ...cleaned.slice(insertAt)];
+
+      // playerOrder is host-writable under the RTDB rules; write both the
+      // room child and the standalone node (both are read at different times).
+      await updateRtdb(ref(rtdbInstance, `auctions/${roomId}/room/playerOrder`), newOrder);
+      await updateRtdb(ref(rtdbInstance, `auctions/${roomId}/playerOrder`), newOrder);
+
+      const isResolved = live.status === 'sold' || live.status === 'unsold' || live.status === 'awaiting_consent';
+      if (isResolved) {
+        // Lot is already decided → start the recalled player's fresh bidding
+        // round right now instead of waiting for the next natural advance.
+        await runTransactionRtdb(liveRef, (currentLive) =>
+          currentLive && currentLive.playerId === live.playerId &&
+          (currentLive.status === 'sold' || currentLive.status === 'unsold' || currentLive.status === 'awaiting_consent')
+            ? transactAdvance(currentLive, {
+                currentPlayerId: live.playerId,
+                nextPlayerId: player.id,
+                timerEndsAt: getSyncedTime() + (room.settings?.bidTimer || 10) * 1000,
+              })
+            : undefined,
+        );
+      }
+      await push(ref(rtdbInstance, `auctions/${roomId}/messages`), {
+        userId: 'system',
+        userName: 'System',
+        text: `Host pulled ${player.name} back into the auction.`,
+        type: 'log',
+        timestamp: serverTimestampRtdb(),
+      }).catch(() => {});
+    } catch (err) {
+      console.error('[recall] recallPlayer failed', err);
+      handleFirebaseError(err);
+    }
+  }, [currentAuction?.server, getSyncedTime, handleFirebaseError, updateLocalSoloState]);
+
+  /**
+   * Grant admin to a room member (sticky — admins keep their role even when
+   * offline, so when the host returns both are admins again). Only the host
+   * or an existing admin may grant; you cannot grant yourself. The roster
+   * lives at auctions/{room}/admins and is merged (never removed) so the
+   * handover is permanent by design.
+   */
+  const grantAdmin = useCallback(async (roomId, targetUserId, targetName) => {
+    if (!roomId || !targetUserId) return;
+    if (isLocalRoom(roomId, currentAuction?.server)) return; // solo rooms: everyone is admin
+    if (targetUserId === user?.uid) throw new Error('You are already an admin here.');
+
+    const server = normalizeServer(currentAuction?.server || getActiveServer());
+    const rtdbInstance = getRtdb(server);
+    const adminsRef = ref(rtdbInstance, `auctions/${roomId}/admins`);
+    await updateRtdb(adminsRef, { [targetUserId]: { at: Date.now(), via: 'grant' } });
+    await push(ref(rtdbInstance, `auctions/${roomId}/messages`), {
+      userId: 'system',
+      userName: 'System',
+      text: `${targetName || 'A manager'} was granted admin by the host.`,
+      type: 'log',
+      timestamp: serverTimestampRtdb(),
+    }).catch(() => {});
+  }, [user?.uid, currentAuction?.server, handleFirebaseError]);
+
+  /**
    * Multiplayer consensus pass vote:
    * Records a user's pass vote. If all eligible non-leading human managers have agreed,
    * automatically triggers passCurrentLot.
@@ -1982,6 +2138,8 @@ export const AuctionProvider = ({ children }) => {
     let currentRoomData = null;
     let currentRtdbData = null;
     let currentPresences = {};
+    let currentAdmins = {};
+    let handoverWrittenAt = null; // cooldown guard for the sticky handover write
     let presenceLoaded = false;
     let hostWasOnline = null; // true -> false is the only auto-pause trigger
     let disconnectPauseArmed = false;
@@ -2134,8 +2292,33 @@ export const AuctionProvider = ({ children }) => {
         const playersWithPresence = (currentRoomData.players || []).map(p => ({
           ...p,
           isOnline: !!currentPresences[p.id]?.online,
-          lastSeen: currentPresences[p.id]?.lastSeen || null
+          lastSeen: currentPresences[p.id]?.lastSeen || null,
+          isAdmin: Boolean(currentAdmins[p.id])
         }));
+
+        // ── Admin handover election ─────────────────────────────────────────
+        // Sticky roster: host + anyone granted (or auto-elevated) stay admins
+        // even after the host returns (dual admin, never revoked). While the
+        // host is offline, the "active" admin is the next available manager:
+        // a roster admin first, otherwise the first online player. The
+        // elected one acts on host-only operations and sees the
+        // "you're the new host" banner.
+        const hostId = currentRoomData.hostId;
+        const hostOnline = !!currentPresences[hostId]?.online;
+        const onlineRosterAdmins = Object.keys(currentAdmins)
+          .filter((uid) => currentAdmins[uid] && currentPresences[uid]?.online && uid !== hostId)
+          .sort();
+        const onlinePlayers = (currentRoomData.players || [])
+          .filter((p) => p && p.id !== hostId && !p.isBot && !String(p.id).startsWith('bot_') && currentPresences[p.id]?.online)
+          .map((p) => p.id)
+          .sort();
+        let activeAdminId = null;
+        if (!hostOnline && presenceLoaded && (onlineRosterAdmins.length > 0 || onlinePlayers.length > 0)) {
+          activeAdminId = onlineRosterAdmins[0] || onlinePlayers[0];
+        }
+        const activeAdminName = activeAdminId
+          ? (currentRoomData.players || []).find((p) => p.id === activeAdminId)?.name
+          : null;
 
         // Mirror the host's real presence to Supabase on transitions only.
         // Elect one reporter = the online member with the lowest uid, so exactly
@@ -2146,6 +2329,25 @@ export const AuctionProvider = ({ children }) => {
           .sort()[0];
         if (reporterId === userId && presenceLoaded && currentRoomData.status === 'waiting') {
           syncHostOnline(!!currentPresences[currentRoomData.hostId]?.online);
+        }
+
+        // Make the handover STICKY: the elected active admin self-claims their
+        // own roster entry so they keep admin even after the host returns
+        // (dual admin). Only the elected admin themselves writes, with a 10s
+        // cooldown; the RTDB rule allows a self-claim only while the host is
+        // offline. No-op until the `admins` rule ships (see
+        // database.rules.json patch), where it just stays host-only admin.
+        if (
+          activeAdminId === userId &&
+          !currentAdmins[userId] &&
+          presenceLoaded &&
+          hostOnline === false &&
+          Date.now() - (handoverWrittenAt || 0) > 10000
+        ) {
+          handoverWrittenAt = Date.now();
+          updateRtdb(ref(roomRtdb, `auctions/${auctionId}/admins`), {
+            [userId]: { at: Date.now(), via: 'handover' },
+          }).catch(() => {});
         }
 
         // Host went online -> offline: pause the live lot. This reuses the
@@ -2182,11 +2384,16 @@ export const AuctionProvider = ({ children }) => {
 
         syncDisconnectPause();
 
-        setCurrentAuction({ 
-          id: auctionId, 
+        setCurrentAuction({
+          id: auctionId,
           ...currentRoomData,
           players: playersWithPresence,
-          currentAuction: currentRtdbData || currentRoomData.currentAuction
+          currentAuction: currentRtdbData || currentRoomData.currentAuction,
+          admins: currentAdmins,
+          activeAdminId,
+          activeAdminName,
+          activeAdminIsMe: activeAdminId === userId,
+          hostOnline,
         });
       }
     };
@@ -2206,6 +2413,22 @@ export const AuctionProvider = ({ children }) => {
       }
       checkAndSet();
     });
+
+    // Sticky admin roster (host + granted admins; never removed by design).
+    // Best-effort: rooms created before the rules ship have no node and
+    // simply fall back to hostId-only admin.
+    let adminSubUnsub = null;
+    const adminsRef = ref(roomRtdb, `auctions/${auctionId}/admins`);
+    try {
+      adminSubUnsub = onValue(adminsRef, (snap) => {
+        currentAdmins = snap.val() || {};
+        checkAndSet();
+      }, () => {
+        /* Rule not yet deployed: read denied — keep hostId as the sole admin */
+      });
+    } catch {
+      adminSubUnsub = null;
+    }
 
     let didFallbackFetch = false;
     let didTeamsFallback = false;
@@ -2434,6 +2657,7 @@ export const AuctionProvider = ({ children }) => {
       clearInterval(watchdog);
       unsubConnected();
       unsubPresence();
+      if (adminSubUnsub) adminSubUnsub();
       unsubAuction();
       unsubLive();
       unsubTeamAdded();
@@ -3065,6 +3289,9 @@ export const AuctionProvider = ({ children }) => {
     votePassLot,
     skipCurrentPlayerSolo,
     fastForwardAuctionSolo,
+    skipLot,
+    recallPlayer,
+    grantAdmin,
     confirmConsent,
     forceConsentAdvance,
     reopenSoldLot,

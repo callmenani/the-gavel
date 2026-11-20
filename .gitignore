@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+gavel-site.tar.gz
+dist-filelist.txt
 *.local
 .env
 .env.*

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   CricketBall,
   CricketBat,
@@ -100,17 +100,19 @@ const renderItem = (item) => {
         transform: `${item.center ? 'translateX(-50%) ' : ''}rotate(${item.rotate || 0}deg)`,
       }}
     >
-      {/* Soft duplicate adds depth without a heavy glow. */}
-      <div className="absolute inset-0 scale-110 blur-[3px] opacity-35" aria-hidden="true">
-        {renderSvgByType(item, size)}
-      </div>
+      {/* Perf: the soft blurred duplicate (scale-110 + blur filter) doubled
+          every art node and forced a filter pass per layer — barely visible
+          on mobile, costly on iOS. Single crisp layer instead. */}
       <div className="relative">{renderSvgByType(item, size)}</div>
     </div>
   );
 };
 
 const PageBackground = ({ showArt = true }) => {
-  const [parallaxY, setParallaxY] = useState(0);
+  // Parallax writes transform directly to the art layer's ref, so scrolling
+  // triggers ZERO React re-renders of this tree (compositor-only update on
+  // iOS — the old setState-per-scroll-frame re-rendered every art node).
+  const artRef = useRef(null);
 
   useEffect(() => {
     if (
@@ -119,17 +121,19 @@ const PageBackground = ({ showArt = true }) => {
     ) {
       return;
     }
+    if (!artRef.current) return;
 
     let ticking = false;
     const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          const offset = Math.min(28, Math.max(0, window.scrollY * 0.035));
-          setParallaxY(offset);
-          ticking = false;
-        });
-        ticking = true;
-      }
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        const offset = Math.min(28, Math.max(0, window.scrollY * 0.035));
+        if (artRef.current) {
+          artRef.current.style.transform = `translate3d(0, ${offset}px, 0)`;
+        }
+        ticking = false;
+      });
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -160,24 +164,6 @@ const PageBackground = ({ showArt = true }) => {
             'radial-gradient(ellipse 50% 42% at 12% 12%, rgba(56, 132, 255, 0.05) 0%, transparent 70%)',
             'radial-gradient(ellipse 70% 24% at 50% 100%, rgba(38, 166, 92, 0.05) 0%, transparent 70%)',
           ].join(', '),
-        }}
-      />
-
-      {/* 2.5. Faint stadium photograph — adds real "arena" depth.
-          Unsplash free image; heavily dimmed + gradient-masked so it never
-          competes with content and costs nothing to serve. */}
-      <div
-        className="fixed inset-0 pointer-events-none -z-20"
-        style={{
-          backgroundImage:
-            "url('https://images.unsplash.com/photo-1522869695456-5b2bbce45d6a?auto=format&fit=crop&w=1600&q=60')",
-          backgroundSize: 'cover',
-          backgroundPosition: 'center 30%',
-          opacity: 0.16,
-          maskImage:
-            'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.55) 40%, transparent 78%)',
-          WebkitMaskImage:
-            'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.55) 40%, transparent 78%)',
         }}
       />
 
@@ -226,11 +212,9 @@ const PageBackground = ({ showArt = true }) => {
         }}
       >
         <div
-          className="relative w-full h-full will-change-transform"
-          style={{
-            transform: `translate3d(0, ${parallaxY}px, 0)`,
-            transition: 'transform 0.1s ease-out',
-          }}
+          ref={artRef}
+          className="relative w-full h-full"
+          style={{ willChange: 'transform' }}
         >
           {TOP_ITEMS.map(renderItem)}
         </div>
