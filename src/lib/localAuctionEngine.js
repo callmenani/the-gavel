@@ -880,9 +880,11 @@ export function localAuctionReducer(state, action) {
       };
     }
 
-    // Host undo: pull the just-sold player back and reopen it for fresh bidding.
+    // Host undo: pull the just-sold player back and reopen it for re-bid.
     // Reverses the sale (refunds the buyer, frees the squad slot) so a lagging
-    // manager can still compete. Re-bids start from 0, so the price can rise.
+    // manager can still compete. The lot resumes *from* the last winning bid:
+    // the bid amount and the team that placed it are restored rather than
+    // reset to ₹0, so the re-auction can only move up.
     case 'REOPEN_LOT': {
       if (!state || state.status !== 'active') return state;
       const live = state.currentAuction;
@@ -914,12 +916,10 @@ export function localAuctionReducer(state, action) {
       });
 
       const timerSec = state.settings?.bidTimer || 10;
+      // Preserve the sale's bid + high bidder so the re-auction resumes from
+      // where it stood (the restored buyer holds the lot until outbid).
       const reopenedLot = {
-        ...live,
-        currentBid: 0,
-        highBidderId: '',
-        highBidderName: '',
-        highBidderTeamId: '',
+        ...live,                    // ← preserves currentBid, highBidderId, highBidderName, highBidderTeamId
         timerEndsAt: now + timerSec * 1000,
         status: 'bidding',
         pausedRemainingMs: null,
@@ -927,6 +927,7 @@ export function localAuctionReducer(state, action) {
         consentDeadline: null,
         celebrationEndsAt: null,
       };
+
 
       return {
         ...state,
@@ -937,7 +938,7 @@ export function localAuctionReducer(state, action) {
           ...state.messages.slice(-50),
           {
             id: `reopen_${now}`,
-            text: `${player.name} pulled back for a fresh bid (lag recovery).`,
+            text: `${player.name} pulled back — re-bid resumes from the last winning bid.`,
             type: 'consent',
             timestamp: now,
           },
