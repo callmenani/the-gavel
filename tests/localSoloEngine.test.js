@@ -621,7 +621,7 @@ test('consent gate: CONSENT_FORCE advances immediately without any consent', () 
   assert.equal(state.currentPlayerIndex, 1);
 });
 
-test('consent gate: REOPEN_LOT undoes the sale (refund + free slot) and reopens fresh bidding', () => {
+test('consent gate: REOPEN_LOT undoes the sale (refund + free slot) and resumes bidding from the last bid + team', () => {
   const human = { uid: 'human_1', displayName: 'Captain', team: 'CSK' };
   let state = localAuctionReducer(null, {
     type: 'INIT_AUCTION',
@@ -634,6 +634,7 @@ test('consent gate: REOPEN_LOT undoes the sale (refund + free slot) and reopens 
 
   state = localAuctionReducer(state, { type: 'PLACE_BID', bidderId: 'human_1', now: 2000 });
   const soldPrice = state.currentAuction.currentBid;
+  const soldTeamId = state.currentAuction.highBidderTeamId;
   state = localAuctionReducer(state, { type: 'RESOLVE_LOT', now: 12000, celebrate: true, celebrationMs: 3000 });
   state = localAuctionReducer(state, { type: 'OPEN_CONSENT', now: 15000 });
 
@@ -644,9 +645,11 @@ test('consent gate: REOPEN_LOT undoes the sale (refund + free slot) and reopens 
 
   state = localAuctionReducer(state, { type: 'REOPEN_LOT', now: 16000 });
 
-  // Back in bidding on the same player, at a fresh 0 price
+  // Back in bidding on the same player, resuming from the last winning bid + team
   assert.equal(state.currentAuction.status, 'bidding');
-  assert.equal(state.currentAuction.currentBid, 0);
+  assert.equal(state.currentAuction.currentBid, soldPrice);       // ← changed: was 0
+  assert.equal(state.currentAuction.highBidderId, 'human_1');     // ← new assertion
+  assert.equal(state.currentAuction.highBidderTeamId, soldTeamId); // ← new assertion
   assert.equal(state.currentPlayerIndex, 0);
 
   // The buyer's purse is refunded and the squad slot is freed
