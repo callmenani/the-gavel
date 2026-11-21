@@ -612,6 +612,7 @@ const AuctionSummary = () => {
                 activeAuction={activeAuction}
                 server={server}
                 user={user}
+                isHost={isHost}
               />
             </motion.section>
           ) : (
