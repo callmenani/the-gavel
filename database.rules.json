@@ -16,6 +16,9 @@
         auctions/{roomId}/messages        chat + system sale logs (any member)
         auctions/{roomId}/teams/{id}      per-team roster/purse, synced by clients
         auctions/{roomId}/presence/{uid}  per-user online flag
+        auctions/{roomId}/admins/{uid}    sticky admin roster (host + granted +
+                                          handover-elevated; a user may self-claim
+                                          only while the original host is offline)
     */
     ".read": false,
     ".write": false,
@@ -72,8 +75,10 @@
         },
 
         // The shuffled auction order is produced by the host when starting.
+        // Elevated (sticky) admins may rewrite it too — that's how the host
+        // "get a player back" recall works when the original host is away.
         "playerOrder": {
-          ".write": "auth != null && root.child('auctions').child($roomId).child('room/hostId').val() == auth.uid"
+          ".write": "auth != null && (root.child('auctions').child($roomId).child('room/hostId').val() == auth.uid || root.child('auctions').child($roomId).child('admins').child(auth.uid).exists())"
         },
 
         "messages": {
@@ -94,6 +99,49 @@
           ".read": "auth != null",
           "$userId": {
             ".write": "auth != null && auth.uid == $userId"
+          }
+        },
+
+        /*
+          Sticky admin roster: { uid: { at, via } }.
+          - Read: any room member.
+          - Write (host): the original host adds co-admins ("grant").
+          - Write (self-claim): a user may claim their own entry ONLY while the
+            original host is offline — that's the auto-handover elevation
+            ("next available player becomes admin; when the host returns,
+            both keep admin").
+          Entries are only ever added, never removed, so admin is sticky.
+        */
+        "admins": {
+          ".read": "auth != null",
+          "$userId": {
+            ".write": "auth != null && (root.child('auctions').child($roomId).child('room/hostId').val() == auth.uid || (auth.uid == $userId && root.child('auctions').child($roomId).child('presence').child(root.child('auctions').child($roomId).child('room/hostId').val()).child('online').val() != true))"
+          }
+        },
+
+        /*
+          P2P voice signaling (Option A, no server): per-user presence +
+          WebRTC offer/answer exchange. Any authenticated room member may
+          read/write; signaling children are consumed and deleted by clients.
+          Payloads are small SDP blobs (tens of KB).
+        */
+        "voice": {
+          ".read": "auth != null",
+          ".write": "auth != null",
+          "$userId": {
+            "online": { ".validate": "newData.isBoolean()" },
+            "muted": { ".validate": "newData.isBoolean()" },
+            "raisedHand": { ".validate": "newData.isBoolean()" },
+            "name": { ".validate": "newData.isString()" },
+            "at": { ".validate": "newData.isNumber()" }
+          },
+          "signal": {
+            "$to": {
+              "$from": {
+                "type": { ".validate": "newData.val() == 'offer' || newData.val() == 'answer'" },
+                "sdp": { ".validate": "newData.isString()" }
+              }
+            }
           }
         }
       }

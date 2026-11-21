@@ -5,8 +5,11 @@ import {
   transactAdvance,
   transactBid,
   transactRoomPlayersSale,
+  transactReopen,
+  transactRoomPlayersSaleRevert,
   transactSale,
   transactTeamSale,
+  transactTeamSaleRevert,
 } from '../src/lib/auctionTransactions.js';
 import { normalizeSquad } from '../src/lib/auctionRules.js';
 
@@ -868,4 +871,126 @@ test('quick jump bids: transactBid accepts valid targetBid, rejects sub-minimum 
     targetBid: 10.0,
   });
   assert.equal(overBudgetJump, undefined, 'Jump bid exceeding budget must abort');
+});
+
+// ─── Issue #4: take-back must restore the last bid + team, not reset to ₹0 ───
+test('take-back (transactReopen) resumes bidding from the last winning bid + team', () => {
+  const gatedLive = {
+    status: 'awaiting_consent',
+    playerId: 'p7',
+    currentBid: 6.45,
+    highBidderId: 'u1',
+    highBidderName: 'CSK',
+    highBidderTeamId: 'CSK',
+    consentVotes: {},
+    consentDeadline: 19000,
+    timerEndsAt: 19000,
+    celebrationEndsAt: 18000,
+  };
+
+  const reopened = transactReopen(gatedLive, {
+    currentPlayerId: 'p7',
+    timerEndsAt: 20000,
+  });
+
+  assert.notEqual(reopened, undefined, 'Reopen must commit');
+  assert.equal(reopened.status, 'bidding');
+  assert.equal(reopened.currentBid, 6.45, 'Last winning bid must be restored');
+  assert.equal(reopened.highBidderId, 'u1', 'High bidder id must be restored');
+  assert.equal(reopened.highBidderTeamId, 'CSK', 'Team that placed the last bid must be restored');
+  assert.equal(reopened.highBidderName, 'CSK');
+  assert.equal(reopened.timerEndsAt, 20000);
+  assert.equal(reopened.consentVotes, null);
+  assert.equal(reopened.consentDeadline, null);
+  assert.equal(reopened.celebrationEndsAt, null);
+
+  // Re-bidding continues FROM the restored bid: a 0.25 bump is the next step.
+  const resumed = transactBid(reopened, {
+    userId: 'u2',
+    userName: 'MI',
+    teamId: 'MI',
+    playerId: 'p7',
+    now: 19500,
+    timerMs: 10000,
+    budget: 100,
+    basePrice: 5.0,
+  });
+  assert.equal(resumed.currentBid, 6.7, 'Re-bid must build on the restored price, not start over');
+  assert.equal(resumed.highBidderId, 'u2');
+
+  // The high bidder cannot re-place their own bid.
+  assert.equal(
+    transactBid(reopened, {
+      userId: 'u1',
+      userName: 'CSK',
+      teamId: 'CSK',
+      playerId: 'p7',
+      now: 19500,
+      timerMs: 10000,
+      budget: 100,
+      basePrice: 5.0,
+    }),
+    undefined,
+    'Restored high bidder cannot bid against themselves',
+  );
+});
+
+test('take-back (transactReopen) only from sold/awaiting_consent, same lot, and preserves the revert pair', () => {
+  // Wrong lot -> abort
+  assert.equal(
+    transactReopen({ status: 'awaiting_consent', playerId: 'p7', currentBid: 6.45 }, {
+      currentPlayerId: 'p8',
+      timerEndsAt: 20000,
+    }),
+    undefined,
+  );
+
+  // Bidding lots are not re-openable
+  assert.equal(
+    transactReopen({ status: 'bidding', playerId: 'p7', currentBid: 6.45 }, {
+      currentPlayerId: 'p7',
+      timerEndsAt: 20000,
+    }),
+    undefined,
+  );
+
+  // Sold-but-not-gated lots are re-openable too
+  const soldLive = transactReopen({
+    status: 'sold',
+    playerId: 'p7',
+    currentBid: 6.45,
+    highBidderId: 'u1',
+    highBidderName: 'CSK',
+    highBidderTeamId: 'CSK',
+  }, { currentPlayerId: 'p7', timerEndsAt: 20000 });
+  assert.equal(soldLive.status, 'bidding');
+  assert.equal(soldLive.currentBid, 6.45);
+
+  // Squad/purse revert is exact (recomputes from remaining squad).
+  const teamAtSale = {
+    teamId: 'CSK',
+    teamName: 'CSK',
+    budgetRemaining: 120 - 6.45,
+    spent: 6.45,
+    squad: [{ id: 'p7', bid: 6.45 }],
+  };
+  const reverted = transactTeamSaleRevert(teamAtSale, { playerId: 'p7', initialBudget: 120 });
+  assert.deepEqual(reverted.squad, []);
+  assert.equal(reverted.spent, 0);
+  assert.equal(reverted.budgetRemaining, 120);
+
+  // Re-reverting is a no-op.
+  assert.deepEqual(transactTeamSaleRevert(reverted, { playerId: 'p7', initialBudget: 120 }), reverted);
+
+  // Room-players stat revert trims spent/squadCount, clamps at 0, leaves others alone.
+  const room = {
+    players: [
+      { id: 'u1', spent: 6.45, squadCount: 1 },
+      { id: 'u2', spent: 3.0, squadCount: 1 },
+    ],
+  };
+  const roomReverted = transactRoomPlayersSaleRevert(room, { winnerId: 'u1', bid: 6.45 });
+  assert.equal(roomReverted.players[0].spent, 0);
+  assert.equal(roomReverted.players[0].squadCount, 0);
+  assert.equal(roomReverted.players[1].spent, 3.0, 'Other managers are untouched');
 });

@@ -823,9 +823,75 @@ export function localAuctionReducer(state, action) {
       );
     }
 
-    // Host undo: pull the just-sold player back and reopen it for fresh bidding.
+    // Host "get the player back": re-insert any player into the order right
+    // after the current position so they get re-bid on (solo rooms).
+    // Sold players are excluded — use REOPEN_LOT to undo a sale instead.
+    case 'RECALL_PLAYER': {
+      if (!state || state.status !== 'active') return state;
+      const live = state.currentAuction;
+      if (!live) return state;
+      const { playerIndex, now = Date.now() } = action;
+      const player = IPL_PLAYERS[playerIndex];
+      if (playerIndex == null || !player) return state;
+
+      // Block recall of already-sold players.
+      const soldIds = new Set(
+        (state.roomTeams || []).flatMap((t) => (t.squad || []).map((m) => m.id)),
+      );
+      if (soldIds.has(player.id)) return state;
+
+      const order = Array.isArray(state.playerOrder) ? state.playerOrder : [];
+      const cleaned = order.filter((i) => i !== playerIndex);
+      const curIdx = cleaned.findIndex((i) => {
+        const p = IPL_PLAYERS[i];
+        return p && p.id === live.playerId;
+      });
+      const insertAt = curIdx >= 0 ? curIdx + 1 : cleaned.length;
+      const newOrder = [...cleaned.slice(0, insertAt), playerIndex, ...cleaned.slice(insertAt)];
+
+      const timerSec = state.settings?.bidTimer || 10;
+      const isResolved = live.status === 'sold' || live.status === 'unsold' || live.status === 'awaiting_consent';
+      let nextIndex = curIdx;
+      let nextLot = live;
+      if (isResolved) {
+        nextIndex = insertAt; // start the recalled lot right now
+        nextLot = {
+          playerId: player.id,
+          currentBid: 0,
+          highBidderId: '',
+          highBidderName: '',
+          highBidderTeamId: '',
+          timerEndsAt: now + timerSec * 1000,
+          status: 'bidding',
+          pausedRemainingMs: null,
+          consentVotes: null,
+          consentDeadline: null,
+        };
+      }
+
+      return {
+        ...state,
+        playerOrder: newOrder,
+        currentPlayerIndex: nextIndex,
+        currentAuction: nextLot,
+        currentLot: nextLot,
+        messages: [
+          ...state.messages.slice(-50),
+          {
+            id: `recall_${player.id}_${now}`,
+            text: `Host pulled ${player.name} back into the auction.`,
+            type: 'log',
+            timestamp: now,
+          },
+        ],
+      };
+    }
+
+    // Host undo: pull the just-sold player back and reopen it for re-bid.
     // Reverses the sale (refunds the buyer, frees the squad slot) so a lagging
-    // manager can still compete. Re-bids start from 0, so the price can rise.
+    // manager can still compete. The lot resumes *from* the last winning bid:
+    // the bid amount and the team that placed it are restored rather than
+    // reset to ₹0, so the re-auction can only move up.
     case 'REOPEN_LOT': {
       if (!state || state.status !== 'active') return state;
       const live = state.currentAuction;
@@ -857,12 +923,10 @@ export function localAuctionReducer(state, action) {
       });
 
       const timerSec = state.settings?.bidTimer || 10;
+      // Preserve the sale's bid + high bidder so the re-auction resumes from
+      // where it stood (the restored buyer holds the lot until outbid).
       const reopenedLot = {
-        ...live,
-        currentBid: 0,
-        highBidderId: '',
-        highBidderName: '',
-        highBidderTeamId: '',
+        ...live,                    // ← preserves currentBid, highBidderId, highBidderName, highBidderTeamId
         timerEndsAt: now + timerSec * 1000,
         status: 'bidding',
         pausedRemainingMs: null,
@@ -870,6 +934,7 @@ export function localAuctionReducer(state, action) {
         consentDeadline: null,
         celebrationEndsAt: null,
       };
+
 
       return {
         ...state,
@@ -880,7 +945,7 @@ export function localAuctionReducer(state, action) {
           ...state.messages.slice(-50),
           {
             id: `reopen_${now}`,
-            text: `${player.name} pulled back for a fresh bid (lag recovery).`,
+            text: `${player.name} pulled back — re-bid resumes from the last winning bid.`,
             type: 'consent',
             timestamp: now,
           },

@@ -98,10 +98,10 @@ test('simulateRemainingAuction: awards live lot to human when leading, all teams
 
   assert.equal(fastForwarded, true);
   const updatedHuman = simulatedTeams.find((t) => t.userId === 'user_shaurya');
-  // Human should have the initial player + the live lot awarded!
-  assert.equal(updatedHuman.squad.length, 2);
-  assert.equal(updatedHuman.squad[1].id, IPL_PLAYERS[0].id);
-  assert.equal(updatedHuman.spent, 20); // 15 + 5
+  // Human keeps existing picks, wins the live lot, and can win more from simulated remaining lots
+  assert.ok(updatedHuman.squad.length >= 2);
+  assert.ok(updatedHuman.squad.some((p) => p.id === IPL_PLAYERS[0].id));
+  assert.ok(updatedHuman.spent >= 20);
 
   // Verify none of the bot teams exceeded squadLimit or budget
   for (const t of simulatedTeams) {

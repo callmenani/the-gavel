@@ -100,7 +100,7 @@ export default function LeagueScheduleTab({
   const [store, setStore] = useState(() => loadLocalPredictions(auctionId));
   const [roundIndex, setRoundIndex] = useState(0);
   const [matchIndex, setMatchIndex] = useState(0);
-  const [voterTeamId, setVoterTeamId] = useState('');
+  const [selectedVoterTeamId, setSelectedVoterTeamId] = useState('');
 
   const teamsWithSquads = useMemo(() => {
     return (activeTeams || [])
@@ -121,16 +121,11 @@ export default function LeagueScheduleTab({
   const currentRound = rounds[roundIndex];
   const currentMatch = currentRound?.[1]?.[matchIndex];
 
-  const myFranchiseId = useMemo(() => {
-    const uid = user?.uid;
-    if (!uid || !activeAuction?.players) return '';
-    const me = activeAuction.players.find((p) => p.id === uid || p.userId === uid);
-    return me?.team || '';
-  }, [user?.uid, activeAuction?.players]);
-
-  useEffect(() => {
-    if (myFranchiseId) setVoterTeamId(myFranchiseId);
-  }, [myFranchiseId]);
+  const uid = user?.uid;
+  const myFranchiseId = uid
+    ? activeAuction?.players?.find((p) => p.id === uid || p.userId === uid)?.team || ''
+    : '';
+  const voterTeamId = selectedVoterTeamId || myFranchiseId;
 
   useEffect(() => {
     if (!auctionId) return undefined;
@@ -139,7 +134,10 @@ export default function LeagueScheduleTab({
 
   const votes = currentMatch ? getVotesForMatch(store, currentMatch.matchId) : {};
   const tally = currentMatch ? tallyMatchVotes(votes, currentMatch.homeId, currentMatch.awayId) : { home: 0, away: 0, total: 0 };
-  const spectators = currentMatch ? getSpectatorTeamIds(teamIds, currentMatch.homeId, currentMatch.awayId) : [];
+  const spectators = useMemo(
+    () => (currentMatch ? getSpectatorTeamIds(teamIds, currentMatch.homeId, currentMatch.awayId) : []),
+    [currentMatch, teamIds],
+  );
 
   const homeData = teamsWithSquads.find((t) => t.teamId === currentMatch?.homeId);
   const awayData = teamsWithSquads.find((t) => t.teamId === currentMatch?.awayId);
@@ -254,7 +252,7 @@ export default function LeagueScheduleTab({
                 <button
                   key={tid}
                   type="button"
-                  onClick={() => setVoterTeamId(tid)}
+                  onClick={() => setSelectedVoterTeamId(tid)}
                   className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border ${
                     voterTeamId === tid ? 'bg-white text-black border-white' : 'border-white/15 text-slate-400'
                   }`}
