@@ -46,3 +46,7 @@ export function countPublicRoomsOnServer(rooms, selectedServer) {
     selectedServer,
   }).length;
 }
+
+export function countDiscoverablePublicRooms(rooms) {
+  return (rooms || []).filter(isPublicRoomDiscoverable).length;
+}

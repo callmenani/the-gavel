@@ -11,7 +11,22 @@ const rawEnv =
     ? process.env
     : {};
 
-const API_BASE_URL = (rawEnv.VITE_DIRECTORY_API_URL || '').replace(/\/+$/, '');
+/** Cloudflare Worker base URL, or empty string for same-origin `/api` (Vite proxy / Pages). */
+export function resolveDirectoryApiBase() {
+  const fromEnv = (rawEnv.VITE_DIRECTORY_API_URL || '').replace(/\/+$/, '');
+  if (fromEnv) return fromEnv;
+  if (typeof window !== 'undefined') return '';
+  return '';
+}
+
+/** True when `.env` sets the worker URL (required for local dev proxy + directory writes). */
+export function isDirectoryApiConfigured() {
+  return Boolean((rawEnv.VITE_DIRECTORY_API_URL || '').trim());
+}
+
+function getApiBaseUrl() {
+  return resolveDirectoryApiBase();
+}
 
 // ─── Multi-Tier Storage Cache Helpers ───
 function readStorageCache(storage, key, ttlMs) {
@@ -42,7 +57,7 @@ function removeStorageCache(storage, key) {
 }
 
 async function request(endpoint, options = {}) {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = `${getApiBaseUrl()}${endpoint}`;
   const isGet = !options.method || options.method.toUpperCase() === 'GET';
 
   let response;
@@ -105,9 +120,11 @@ const PLATFORM_STATS_KEY = 'thegavel_cache_platform_stats';
  * Edge-cached on Cloudflare + 20s in sessionStorage.
  */
 export async function getPublicRooms(force = false) {
-  if (!API_BASE_URL) {
-    console.warn('[directoryApi] VITE_DIRECTORY_API_URL is not set; public lobby list unavailable.');
-    return [];
+  if (!isDirectoryApiConfigured() && typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+    console.warn(
+      '[directoryApi] VITE_DIRECTORY_API_URL is not set — public lobby list and room discovery are disabled locally. ' +
+        'Add the same worker URL as production to .env and restart the dev server.',
+    );
   }
   if (!force) {
     const cached = readStorageCache(

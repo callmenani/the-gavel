@@ -111,12 +111,22 @@ const Lobby = () => {
   useEffect(() => {
     if (!isAdmin || !id || currentAuction?.isPublic === false) return undefined;
     if (currentAuction?.status !== 'waiting' && currentAuction?.status !== 'active') return undefined;
-    updateAuctionRecord(id, {
+    const payload = {
       status: currentAuction.status,
       host_online: 1,
-    }).catch(() => {});
+    };
+    if (Array.isArray(currentAuction.players)) {
+      payload.players = currentAuction.players;
+    }
+    updateAuctionRecord(id, payload).catch(() => {});
     return undefined;
-  }, [isAdmin, id, currentAuction?.status, currentAuction?.isPublic]);
+  }, [
+    isAdmin,
+    id,
+    currentAuction?.status,
+    currentAuction?.isPublic,
+    currentAuction?.players,
+  ]);
 
   const handleExitRequest = () => {
     if (isAdmin && currentAuction?.status === 'waiting') {
