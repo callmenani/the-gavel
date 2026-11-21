@@ -21,7 +21,7 @@ export const isFirebaseConfigured =
   Boolean(firebaseKey) && firebaseKey !== DUMMY_KEY;
 
 // Cloudflare D1 directory / edge worker (public lobby list, platform stats).
-export const isDirectoryConfigured = Boolean(rawEnv.VITE_DIRECTORY_API_URL);
+export const isDirectoryConfigured = Boolean((rawEnv.VITE_DIRECTORY_API_URL || '').trim());
 
 // Multiplayer lives or dies with Firebase.
 export const FEATURE_MULTIPLAYER = isFirebaseConfigured;

@@ -220,12 +220,20 @@ export default {
         const formatted = (roomsRes.results || []).map((r) => {
           const players = parseJsonField(r.players, []);
           const settings = parseJsonField(r.settings, {});
+          const joinedSlots = Array.isArray(players)
+            ? players.filter(
+                (p) =>
+                  p &&
+                  !p.isAuctionManager &&
+                  (p.team || p.isBot || String(p.id || '').startsWith('bot_')),
+              ).length
+            : 1;
           return {
             id: r.id,
             server: r.server || 'server-1',
             status: r.status || 'waiting',
             type: r.auction_type || 'mega',
-            playerCount: Array.isArray(players) ? players.length : 1,
+            playerCount: joinedSlots || 1,
             maxPlayers: 10,
             hostName: Array.isArray(players) && players[0] ? players[0].name : 'Host',
             hostOnline: r.host_online !== 0,

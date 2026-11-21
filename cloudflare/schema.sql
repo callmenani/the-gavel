@@ -50,4 +50,7 @@ CREATE TABLE IF NOT EXISTS platform_stats (
   updated_at INTEGER
 );
 
+INSERT OR IGNORE INTO platform_stats (id, total_count, active_count, updated_at)
+VALUES ('global', 0, 0, (strftime('%s', 'now') * 1000));
+
 

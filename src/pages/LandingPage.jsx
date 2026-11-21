@@ -17,8 +17,14 @@ import {
   getPublicRooms,
   invalidatePublicRoomsCache,
   fetchPlatformStats,
+  isDirectoryApiConfigured,
 } from "../lib/directoryApi";
-import { filterPublicRooms, countPublicRoomsOnServer } from "../lib/publicRoomsFilter";
+import {
+  filterPublicRooms,
+  countPublicRoomsOnServer,
+  countDiscoverablePublicRooms,
+} from "../lib/publicRoomsFilter";
+import { formatPublicRoomOccupancy } from "../lib/publicRoomDisplay";
 import { generateRoomCode, normalizeRoomCode, generateSoloRoomCode } from "../lib/roomCodes";
 import { ref, remove } from "firebase/database";
 import {
@@ -32,7 +38,7 @@ import {
   withServerParam,
 } from "../lib/auctionServers";
 import { localAuctionReducer, saveLocalSoloRoom, listLocalSoloRooms, deleteLocalSoloRoom } from "../lib/localAuctionEngine";
-import { FEATURE_MULTIPLAYER } from "../lib/appConfig";
+import { FEATURE_MULTIPLAYER, isDirectoryConfigured } from "../lib/appConfig";
 import { IPL_PLAYERS } from "../data/players";
 import { TEAMS } from "../data/teams";
 import {
@@ -211,7 +217,7 @@ const LandingPage = () => {
   // Live Public Rooms state (Cloudflare D1 directory)
   const [publicRooms, setPublicRooms] = useState([]);
   const [publicRoomsLoading, setPublicRoomsLoading] = useState(false);
-  const [, setPublicRoomsError] = useState(null);
+  const [publicRoomsError, setPublicRoomsError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState("all");
 
@@ -229,6 +235,34 @@ const LandingPage = () => {
     () => countPublicRoomsOnServer(publicRooms, selectedServer),
     [publicRooms, selectedServer],
   );
+
+  const discoverablePublicRoomsCount = useMemo(
+    () => countDiscoverablePublicRooms(publicRooms),
+    [publicRooms],
+  );
+
+  const publicLobbyEmptyHint = useMemo(() => {
+    if (publicRoomsError) {
+      return "Could not load the public room directory. Check your connection, click Refresh, and ensure VITE_DIRECTORY_API_URL is set in .env.";
+    }
+    if (!isDirectoryConfigured && !isDirectoryApiConfigured()) {
+      return "Local dev needs VITE_DIRECTORY_API_URL in .env (same value as Cloudflare Pages). Without it, new rooms are not listed for other tabs or players. Restart npm run dev after adding it.";
+    }
+    if (
+      discoverablePublicRoomsCount > 0 &&
+      filteredPublicRooms.length === 0 &&
+      serverRoomsCount === 0
+    ) {
+      return `There are ${discoverablePublicRoomsCount} public room(s) on other servers. Switch the server selector above to match where the host created the room, then refresh.`;
+    }
+    return `No open public rooms on ${getServerMeta(selectedServer).label} right now. Create one to get started! Hosts must stay in the lobby so waiting rooms stay visible.`;
+  }, [
+    publicRoomsError,
+    discoverablePublicRoomsCount,
+    filteredPublicRooms.length,
+    serverRoomsCount,
+    selectedServer,
+  ]);
 
   // Aggregated platform stats (zero row egress — HEAD count query only)
   const [auctionStats, setAuctionStats] = useState({
@@ -297,7 +331,7 @@ const LandingPage = () => {
       }
     } catch (err) {
       console.warn("[landing] Failed to load public rooms", err);
-      setPublicRoomsError("Failed to load public rooms");
+      setPublicRoomsError(err?.message || "Failed to load public rooms");
     } finally {
       setPublicRoomsLoading(false);
     }
@@ -1415,8 +1449,8 @@ const LandingPage = () => {
                       <p className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">
                         No Active Public Lobbies
                       </p>
-                      <p className="text-[9px] sm:text-[10px] text-gray-400 font-medium max-w-xs">
-                        No open public rooms on {getServerMeta(selectedServer).label} right now. Create one to get started!
+                      <p className="text-[9px] sm:text-[10px] text-gray-400 font-medium max-w-sm px-2">
+                        {publicLobbyEmptyHint}
                       </p>
                     </div>
                   ) : (
@@ -1434,6 +1468,12 @@ const LandingPage = () => {
                                 </h2>
                                 <span className="text-white font-mono font-bold text-[9px] sm:text-xs tracking-wider shrink-0">
                                   {room.id}
+                                </span>
+                                <span
+                                  className="text-[9px] sm:text-[10px] font-mono font-bold text-sky-300/90 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 rounded-md shrink-0"
+                                  title="Franchise slots filled"
+                                >
+                                  {formatPublicRoomOccupancy(room)}
                                 </span>
                               </div>
 
