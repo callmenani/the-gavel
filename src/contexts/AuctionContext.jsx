@@ -22,6 +22,7 @@ import {
 import { IPL_PLAYERS } from '../data/players';
 import { evaluateBotBid } from '../lib/botEngine';
 import { isSoloBotRoom, simulateBotLot, simulateRemainingAuction } from '../lib/botSimulation';
+import { cacheSummarySnapshot } from '../lib/summarySnapshot.js';
 import { 
   ref, 
   set, 
@@ -877,7 +878,8 @@ export const AuctionProvider = ({ children }) => {
     if (soloStateManagerRef.current) {
       return soloStateManagerRef.current.updateState(action);
     }
-    if (!isSoloLockHeldRef.current) {
+    const isCriticalSoloAction = action?.type === 'FAST_FORWARD' || action?.type === 'END_AUCTION';
+    if (!isSoloLockHeldRef.current && !isCriticalSoloAction) {
       if (localSoloStateRef.current?.status !== 'completed') {
         console.warn('[solo] Refusing to update local solo state: lock is not held by this window.');
       }
@@ -910,6 +912,9 @@ export const AuctionProvider = ({ children }) => {
         teamId: humanTeam.teamId || humanTeam.id,
         team: humanTeam.teamId || humanTeam.id,
       });
+    }
+    if (next?.status === 'completed') {
+      cacheSummarySnapshot(next.id || next.roomId, next, teamsList);
     }
     return next;
   }, [user?.uid]);
@@ -1525,7 +1530,13 @@ export const AuctionProvider = ({ children }) => {
    */
   const fastForwardAuctionSolo = useCallback(async (roomId) => {
     if (isLocalRoom(roomId, currentAuction?.server)) {
-      updateLocalSoloState({ type: 'FAST_FORWARD', now: Date.now() });
+      const next = updateLocalSoloState({ type: 'FAST_FORWARD', now: Date.now() });
+      if (next?.status === 'completed') {
+        navigate(withServerParam(`/summary/${roomId}`, SERVER_LOCAL), {
+          replace: true,
+          state: { defaultTab: 'league' },
+        });
+      }
       return;
     }
 
@@ -1591,15 +1602,28 @@ export const AuctionProvider = ({ children }) => {
         status: 'completed',
       });
 
+      cacheSummarySnapshot(
+        roomId,
+        { ...room, id: roomId, status: 'completed', fastForwarded: true },
+        simulatedTeams,
+      );
+      setCurrentAuction((prev) => (prev?.id === roomId ? { ...prev, status: 'completed', fastForwarded: true } : prev));
+      setRoomTeams(simulatedTeams);
+
       // Flush final state to Supabase / Firestore
       await flushAuctionToFirestore(roomId, server);
+
+      navigate(withServerParam(`/summary/${roomId}`, server), {
+        replace: true,
+        state: { defaultTab: 'league' },
+      });
     } catch (err) {
       console.error('[auction] fastForwardAuctionSolo error', err);
     } finally {
       isSimulatingRef.current = false;
       endingPlayerRef.current = false;
     }
-  }, [user?.uid, team?.teamId, currentAuction?.server, flushAuctionToFirestore]);
+  }, [user?.uid, team?.teamId, currentAuction?.server, flushAuctionToFirestore, navigate]);
 
   // A finished lot is normally advanced by the client that finalized it. If
   // that client drops before its timer fires, any other client finishes the
@@ -2988,6 +3012,12 @@ export const AuctionProvider = ({ children }) => {
     }
 
     // 3. Delete only after the completed snapshot reached Supabase.
+    cacheSummarySnapshot(
+      roomId,
+      { ...currentAuction, id: roomId, status: 'completed' },
+      roomTeams,
+    );
+
     const persisted = await flushAuctionToFirestore(roomId, server);
     if (persisted) {
       setTimeout(async () => {
@@ -2998,7 +3028,12 @@ export const AuctionProvider = ({ children }) => {
         }
       }, 30000);
     }
-  }, [user, currentAuction, updateLocalSoloState, navigate, flushAuctionToFirestore, persistSoloAuction]);
+
+    navigate(withServerParam(`/summary/${roomId}`, server), {
+      replace: true,
+      state: { defaultTab: 'league' },
+    });
+  }, [user, currentAuction, roomTeams, updateLocalSoloState, navigate, flushAuctionToFirestore, persistSoloAuction]);
 
 
 
