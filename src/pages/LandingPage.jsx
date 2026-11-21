@@ -178,6 +178,8 @@ const LandingPage = () => {
   const [auctionType, setAuctionType] = useState("mega");
   const [playSolo, setPlaySolo] = useState(!FEATURE_MULTIPLAYER);
   const [isPublicRoom, setIsPublicRoom] = useState(true);
+  const [adminLayout, setAdminLayout] = useState("host_plays");
+  const [hostAsAuctionManager, setHostAsAuctionManager] = useState(false);
   const [roomCode, setRoomCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -575,10 +577,18 @@ const LandingPage = () => {
             result = await createRoom(
               candidate,
               user.uid,
-              { name: displayName, team: selectedTeam },
+              {
+                name: displayName,
+                team: adminLayout === "dedicated_admin" && hostAsAuctionManager ? "" : selectedTeam,
+              },
               auctionType,
               isPublicRoom,
               selectedServer,
+              {
+                adminLayout,
+                hostAsAuctionManager:
+                  adminLayout === "dedicated_admin" && hostAsAuctionManager,
+              },
             );
             newRoomId = candidate;
             break;
@@ -1145,6 +1155,60 @@ const LandingPage = () => {
                     <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-slate-900 shadow-md" />
                   </button>
                 </div>
+                )}
+
+                {FEATURE_MULTIPLAYER && !playSolo && (
+                  <div className="p-3 sm:p-4 bg-white/[0.02] border border-white/5 rounded-xl sm:rounded-2xl space-y-3">
+                    <h2 className="text-[10px] sm:text-[11px] font-black uppercase text-white tracking-wider">
+                      Room layout
+                    </h2>
+                    <div className="grid sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAdminLayout("host_plays");
+                          setHostAsAuctionManager(false);
+                        }}
+                        className={`p-3 rounded-xl border text-left transition-all ${
+                          adminLayout === "host_plays"
+                            ? "border-white/25 bg-white/[0.08]"
+                            : "border-white/10 bg-white/[0.02] hover:bg-white/[0.04]"
+                        }`}
+                      >
+                        <p className="text-[9px] font-black uppercase text-white tracking-wider">10-player</p>
+                        <p className="text-[8px] text-gray-400 mt-1 font-medium">
+                          Host is one of the 10 franchises and runs the auction.
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdminLayout("dedicated_admin")}
+                        className={`p-3 rounded-xl border text-left transition-all ${
+                          adminLayout === "dedicated_admin"
+                            ? "border-white/25 bg-white/[0.08]"
+                            : "border-white/10 bg-white/[0.02] hover:bg-white/[0.04]"
+                        }`}
+                      >
+                        <p className="text-[9px] font-black uppercase text-white tracking-wider">10 + 1 admin</p>
+                        <p className="text-[8px] text-gray-400 mt-1 font-medium">
+                          10 bidding franchises plus a separate auction manager who cannot bid.
+                        </p>
+                      </button>
+                    </div>
+                    {adminLayout === "dedicated_admin" && (
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={hostAsAuctionManager}
+                          onChange={(e) => setHostAsAuctionManager(e.target.checked)}
+                          className="mt-0.5"
+                        />
+                        <span className="text-[8px] sm:text-[9px] text-gray-400 font-medium leading-relaxed">
+                          I will join as the dedicated auction manager only (no franchise, no bidding).
+                        </span>
+                      </label>
+                    )}
+                  </div>
                 )}
 
                 {/* Public Lobby Directory Toggle (Cloud Rooms only) */}

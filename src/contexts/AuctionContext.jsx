@@ -71,6 +71,14 @@ import {
   shuffleArray,
 } from '../lib/auctionRules';
 import {
+  ADMIN_LAYOUT,
+  auctionManagerSlotOpen,
+  canJoinAsFranchise,
+  isAuctionManagerUser,
+  isDedicatedAdminLayout,
+  MAX_FRANCHISE_SLOTS,
+} from '../lib/auctionRoles.js';
+import {
   transactAdvance,
   transactBid,
   transactConsentVote,
@@ -201,6 +209,7 @@ export const AuctionProvider = ({ children }) => {
     auctionType = 'mega',
     isPublic = true,
     server = DEFAULT_AUCTION_SERVER,
+    roomOptions = {},
   ) => {
     if (isLocalRoom(roomId, server)) {
       return;
@@ -267,6 +276,14 @@ export const AuctionProvider = ({ children }) => {
     const squadLimit = isSprint5 ? 5 : (isSprint11 || isLegends) ? 11 : 25;
     const overseasLimit = isSprint5 ? 2 : (isSprint11 || isLegends) ? 4 : 8;
     const settings = { bidTimer: 10, budget };
+    const adminLayout = roomOptions.adminLayout === ADMIN_LAYOUT.DEDICATED_ADMIN
+      ? ADMIN_LAYOUT.DEDICATED_ADMIN
+      : ADMIN_LAYOUT.HOST_PLAYS;
+    const hostAsAuctionManager = Boolean(
+      adminLayout === ADMIN_LAYOUT.DEDICATED_ADMIN && roomOptions.hostAsAuctionManager,
+    );
+    const hostTeamId = hostAsAuctionManager ? '' : playerDetails.team;
+    const hostTeamName = hostAsAuctionManager ? '' : (teamDetails?.name || 'Unknown');
 
     const roomData = {
       hostId: userId,
@@ -274,15 +291,18 @@ export const AuctionProvider = ({ children }) => {
       status: 'waiting',
       auctionType,
       isPublic: !!isPublic,
+      adminLayout,
+      auctionManagerId: hostAsAuctionManager ? userId : null,
       squadLimit,
       overseasLimit,
       server: actualServer,
       players: [{
         id: userId,
         name: playerDetails.name,
-        team: playerDetails.team,
-        teamName: teamDetails?.name || 'Unknown',
-        isHost: true
+        team: hostTeamId,
+        teamName: hostTeamName,
+        isHost: true,
+        isAuctionManager: hostAsAuctionManager,
       }],
       bannedPlayers: [],
       settings
@@ -328,7 +348,7 @@ export const AuctionProvider = ({ children }) => {
         // Admins node unavailable (rules not deployed yet) — hostId still governs.
       }
 
-      if (playerDetails.team) {
+      if (playerDetails.team && !hostAsAuctionManager) {
         const rtdbTeamRef = ref(rtdb, `auctions/${roomId}/teams/${roomId}_${userId}`);
         await set(rtdbTeamRef, {
           auctionId: roomId,
@@ -1454,6 +1474,50 @@ export const AuctionProvider = ({ children }) => {
   }, [user?.uid, currentAuction?.server, handleFirebaseError]);
 
   /**
+   * Host designates a room member (no franchise) as the dedicated auction manager.
+   */
+  const assignAuctionManager = useCallback(async (roomId, targetUserId, targetName) => {
+    if (!roomId || !targetUserId) return;
+    if (currentAuction?.hostId !== user?.uid) {
+      throw new Error('Only the room host can assign an auction manager.');
+    }
+    if (!isDedicatedAdminLayout(currentAuction)) {
+      throw new Error('This room is not using the 10+1 admin layout.');
+    }
+    const server = normalizeServer(currentAuction?.server || getActiveServer());
+    const rtdbInstance = getRtdb(server);
+    const roomRef = ref(rtdbInstance, `auctions/${roomId}/room`);
+    const adminsRef = ref(rtdbInstance, `auctions/${roomId}/admins`);
+
+    await runTransactionRtdb(roomRef, (room) => {
+      if (!room) return room;
+      const nextPlayers = mapRoomPlayers(room.players, (p) => {
+        if (p.id === targetUserId) {
+          return { ...p, isAuctionManager: true, team: '', teamName: '' };
+        }
+        if (p.isAuctionManager) {
+          return { ...p, isAuctionManager: false };
+        }
+        return p;
+      });
+      return {
+        ...room,
+        auctionManagerId: targetUserId,
+        players: nextPlayers,
+      };
+    });
+
+    await updateRtdb(adminsRef, { [targetUserId]: { at: Date.now(), via: 'auction_manager' } });
+    await push(ref(rtdbInstance, `auctions/${roomId}/messages`), {
+      userId: 'system',
+      userName: 'System',
+      text: `${targetName || 'A manager'} is now the dedicated auction manager (cannot bid).`,
+      type: 'log',
+      timestamp: serverTimestampRtdb(),
+    }).catch(() => {});
+  }, [user?.uid, currentAuction]);
+
+  /**
    * Multiplayer consensus pass vote:
    * Records a user's pass vote. If all eligible non-leading human managers have agreed,
    * automatically triggers passCurrentLot.
@@ -1843,43 +1907,71 @@ export const AuctionProvider = ({ children }) => {
 
     const existingPlayers = mapRoomPlayers(data.players, (p) => p);
     const playerExists = existingPlayers.find(p => p.id === userId);
+    const joinAsAuctionManager = Boolean(playerDetails.joinAsAuctionManager);
 
     // Solo Bot Room Lock: if the room was started as a solo-vs-bots game, deny new human managers
     if (data.isSoloBotRoom && !playerExists) {
       throw new Error("This is a single-player bot auction and cannot be joined.");
     }
-    
+
+    if (joinAsAuctionManager) {
+      if (!isDedicatedAdminLayout(data)) {
+        throw new Error('This room does not have a separate auction manager slot.');
+      }
+      if (data.auctionManagerId && data.auctionManagerId !== userId) {
+        throw new Error('The auction manager slot is already filled.');
+      }
+    } else if (playerDetails.team && !playerExists && !canJoinAsFranchise(data)) {
+      throw new Error(`All ${MAX_FRANCHISE_SLOTS} franchise slots are full. Join as auction manager or spectate.`);
+    }
+
     // Preserve stats and bot flags from an existing entry; a re-join (e.g. a
     // refresh during an active auction) must not erase spent/squadCount.
     const updatedPlayer = {
       ...(playerExists || {}),
       id: userId,
       name: playerDetails.name || (playerExists ? playerExists.name : 'Manager'),
-      team: playerDetails.team || (playerExists ? playerExists.team : ''),
-      teamName: teamDetails?.name || (playerExists ? playerExists.teamName : 'Unknown'),
+      team: joinAsAuctionManager
+        ? ''
+        : (playerDetails.team || (playerExists ? playerExists.team : '')),
+      teamName: joinAsAuctionManager
+        ? ''
+        : (teamDetails?.name || (playerExists ? playerExists.teamName : 'Unknown')),
       isHost: playerExists ? playerExists.isHost : false,
+      isAuctionManager: joinAsAuctionManager || Boolean(playerExists?.isAuctionManager),
       spent: toFiniteNumber(playerExists?.spent, 0),
       squadCount: toFiniteNumber(playerExists?.squadCount, 0),
     };
 
     const updatedPlayers = mergeRoomPlayer(existingPlayers, updatedPlayer);
 
-    // Update RTDB (0 Firestore cost in lobby!). If the RTDB room node was
-    // missing, write the full directory/Firestore snapshot so joinAuction does
-    // not latch onto a partial `{ players }` room.
-    const roomRef = ref(rtdb, `auctions/${roomId}/room`);
+  const roomRef = ref(rtdb, `auctions/${roomId}/room`);
+    const applyManagerId = joinAsAuctionManager || updatedPlayer.isAuctionManager;
+
     if (roomWasMissing) {
-      await set(roomRef, { ...data, players: updatedPlayers });
+      await set(roomRef, {
+        ...data,
+        players: updatedPlayers,
+        ...(applyManagerId ? { auctionManagerId: userId } : {}),
+      });
+    } else if (applyManagerId) {
+      await runTransactionRtdb(roomRef, (room) => {
+        if (!room) return room;
+        if (room.auctionManagerId && room.auctionManagerId !== userId) return;
+        return {
+          ...room,
+          auctionManagerId: userId,
+          players: mergeRoomPlayer(room.players, updatedPlayer),
+        };
+      });
     } else {
-      // Transaction on the roster only: two managers joining at once must both
-      // survive, and the rule for room/players allows any member to write it.
       await runTransactionRtdb(ref(rtdb, `auctions/${roomId}/room/players`), (currentPlayers) =>
         mergeRoomPlayer(currentPlayers, updatedPlayer),
       );
     }
 
     // Create/Update team in RTDB if team is provided
-    if (playerDetails.team) {
+    if (playerDetails.team && !joinAsAuctionManager) {
       const rtdbTeamSnap = await get(ref(rtdb, `auctions/${roomId}/teams/${roomId}_${userId}`));
       if (!rtdbTeamSnap.exists()) {
         const teamDataToSet = {
@@ -1918,8 +2010,10 @@ export const AuctionProvider = ({ children }) => {
         const bannedPlayers = Array.isArray(currentRoom.bannedPlayers)
           ? currentRoom.bannedPlayers
           : Object.values(currentRoom.bannedPlayers || {});
+        const clearingManager = currentRoom.auctionManagerId === playerObj.id;
         return {
           ...currentRoom,
+          ...(clearingManager ? { auctionManagerId: null } : {}),
           players: mapRoomPlayers(currentRoom.players, (player) => player).filter(
             (player) => player.id !== playerObj.id && player.userId !== playerObj.id,
           ),
@@ -2755,6 +2849,9 @@ export const AuctionProvider = ({ children }) => {
   const placeBid = useCallback(async (targetBidAmount = null) => {
     if (!currentAuction) throw new Error("Auction not found!");
     if (!user) throw new Error("Please log in to bid!");
+    if (isAuctionManagerUser(currentAuction, user.uid)) {
+      throw new Error('Auction managers cannot bid on players.');
+    }
     if (!team) throw new Error("You must select a team in the lobby to participate!");
     if (currentAuction.bannedPlayers && currentAuction.bannedPlayers.includes(user.uid)) {
       throw new Error("You have been removed from this auction and cannot bid.");
@@ -3351,6 +3448,7 @@ export const AuctionProvider = ({ children }) => {
     skipLot,
     recallPlayer,
     grantAdmin,
+    assignAuctionManager,
     confirmConsent,
     forceConsentAdvance,
     reopenSoldLot,

@@ -63,6 +63,9 @@ export function mapRoomPlayers(players, mapper) {
 
 export const MIN_TEAMS_TO_START = 2;
 
+/** Max human/bot franchises in a live room (auction manager is not a franchise). */
+export const MAX_FRANCHISE_SLOTS = 10;
+
 /** Distinct franchises in the room. Human and bot managers both carry `team`. */
 export function countAuctionTeams(players) {
   return new Set(mapRoomPlayers(players, (player) => player.team).filter(Boolean)).size;
