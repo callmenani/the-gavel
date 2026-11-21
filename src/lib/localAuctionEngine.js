@@ -825,6 +825,7 @@ export function localAuctionReducer(state, action) {
 
     // Host "get the player back": re-insert any player into the order right
     // after the current position so they get re-bid on (solo rooms).
+    // Sold players are excluded — use REOPEN_LOT to undo a sale instead.
     case 'RECALL_PLAYER': {
       if (!state || state.status !== 'active') return state;
       const live = state.currentAuction;
@@ -832,6 +833,12 @@ export function localAuctionReducer(state, action) {
       const { playerIndex, now = Date.now() } = action;
       const player = IPL_PLAYERS[playerIndex];
       if (playerIndex == null || !player) return state;
+
+      // Block recall of already-sold players.
+      const soldIds = new Set(
+        (state.roomTeams || []).flatMap((t) => (t.squad || []).map((m) => m.id)),
+      );
+      if (soldIds.has(player.id)) return state;
 
       const order = Array.isArray(state.playerOrder) ? state.playerOrder : [];
       const cleaned = order.filter((i) => i !== playerIndex);
