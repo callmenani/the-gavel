@@ -698,7 +698,7 @@ export function localAuctionReducer(state, action) {
           ...state.messages.slice(-50),
           {
             id: `ff_${now}`,
-            text: 'Fast-Forward complete: Remaining lots were drafted by AI bots.',
+            text: 'Fast-Forward complete: Remaining lots were drafted for all franchises.',
             type: 'log',
             timestamp: now,
           },
