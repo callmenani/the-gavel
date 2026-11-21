@@ -345,6 +345,21 @@ const AuctionRoom = () => {
 
    const handleRecall = async (playerIndex) => {
       if (!isAdmin || playerIndex == null) return;
+      const player = IPL_PLAYERS[playerIndex];
+      if (!player) return;
+
+      // Block recall of sold players — show a visible error toast.
+      const soldIds = new Set(
+         (roomTeams || []).flatMap((t) => (t.squad || []).map((m) => m.id)),
+      );
+      if (soldIds.has(player.id)) {
+         setError(`Sold player's can't be pulled back into auction`);
+         setTimeout(() => setError(''), 3000);
+         setRecallQuery('');
+         setShowRecallPanel(false);
+         return;
+      }
+
       try {
          await recallPlayer(id, playerIndex);
       } catch (err) {
