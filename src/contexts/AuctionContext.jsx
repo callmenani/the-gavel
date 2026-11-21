@@ -1370,6 +1370,14 @@ export const AuctionProvider = ({ children }) => {
       const baseOrder = Array.isArray(room.playerOrder) && room.playerOrder.length > 0
         ? room.playerOrder
         : fullOrder;
+      
+         // Block recall of already-sold players — sold players appear in team squads.
+      const roomTeams = room.roomTeams || room.teams || [];
+      const soldIds = new Set(
+        (roomTeams || []).flatMap((t) => (Array.isArray(t.squad) ? t.squad.map((m) => m.id) : [])),
+      );
+      if (soldIds.has(player.id)) return;
+
 
       // Drop any existing occurrences of this player, re-insert right after
       // the current lot's position (or at the end if the auction is finished).
