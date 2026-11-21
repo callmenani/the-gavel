@@ -549,7 +549,6 @@ test('consent gate: OPEN_CONSENT parks a sold lot; CONSENT_VOTE advances when ev
   });
 
   state = localAuctionReducer(state, { type: 'PLACE_BID', bidderId: 'human_1', now: 2000 });
-  const soldPrice = state.currentAuction.currentBid;
   state = localAuctionReducer(state, { type: 'RESOLVE_LOT', now: 12000, celebrate: true, celebrationMs: 3000 });
   assert.equal(state.currentAuction.status, 'sold');
 
