@@ -38,6 +38,15 @@ function getCorsHeaders(origin) {
   };
 }
 
+async function purgePublicRoomsCache(cache, origin) {
+  try {
+    const cacheUrl = new URL(`${origin}/api/public-rooms`);
+    await cache.delete(new Request(cacheUrl.toString(), { method: 'GET' }));
+  } catch {
+    /* best-effort */
+  }
+}
+
 function parseJsonField(val, fallback = null) {
   if (!val) return fallback;
   if (typeof val === 'object') return val;
@@ -188,15 +197,21 @@ export default {
         let cached = await cache.match(cacheKey);
         if (cached) return cached;
 
-        // Active waiting rooms created in the last 20 minutes with online admin/host
-        const twentyMinutesAgo = Date.now() - 20 * 60 * 1000;
+        // Public rooms still open for joins: waiting (host online) or live auction in progress.
+        const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
         const [roomsRes, statsRow] = await Promise.all([
           env.DB.prepare(
-            `SELECT id, server, auction_type, squad_limit, overseas_limit, settings, players, host_online, created_at 
+            `SELECT id, server, auction_type, status, squad_limit, overseas_limit, settings, players, host_online, created_at 
              FROM auctions 
-             WHERE is_public = 1 AND status = 'waiting' AND host_online = 1 AND created_at >= ? 
-             ORDER BY created_at DESC LIMIT 20`
-          ).bind(twentyMinutesAgo).all(),
+             WHERE is_public = 1 
+               AND status IN ('waiting', 'active', 'paused')
+               AND created_at >= ?
+               AND (
+                 status != 'waiting'
+                 OR host_online = 1
+               )
+             ORDER BY created_at DESC LIMIT 40`
+          ).bind(threeHoursAgo).all(),
           env.DB.prepare(
             `SELECT active_count FROM platform_stats WHERE id = 'global' LIMIT 1`
           ).first().catch(() => null),
@@ -208,6 +223,7 @@ export default {
           return {
             id: r.id,
             server: r.server || 'server-1',
+            status: r.status || 'waiting',
             type: r.auction_type || 'mega',
             playerCount: Array.isArray(players) ? players.length : 1,
             maxPlayers: 10,
@@ -483,6 +499,7 @@ Respond ONLY with valid JSON in this exact structure without markdown:
           await insertAuctionStmt.run();
         }
 
+        ctx.waitUntil(purgePublicRoomsCache(caches.default, url.origin));
         return json({ success: true, id });
       }
 
@@ -540,6 +557,7 @@ Respond ONLY with valid JSON in this exact structure without markdown:
           await env.DB.batch(stmts);
         }
 
+        ctx.waitUntil(purgePublicRoomsCache(caches.default, url.origin));
         return json({ success: true, id });
       }
 

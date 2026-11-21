@@ -15,8 +15,10 @@ import {
   deleteUserHistoryEntry,
   deleteAuctionRecord,
   getPublicRooms,
+  invalidatePublicRoomsCache,
   fetchPlatformStats,
 } from "../lib/directoryApi";
+import { filterPublicRooms, countPublicRoomsOnServer } from "../lib/publicRoomsFilter";
 import { generateRoomCode, normalizeRoomCode, generateSoloRoomCode } from "../lib/roomCodes";
 import { ref, remove } from "firebase/database";
 import {
@@ -211,35 +213,20 @@ const LandingPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState("all");
 
-  const filteredPublicRooms = useMemo(() => {
-    return publicRooms.filter((room) => {
-      const q = searchQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        (room.id && room.id.toLowerCase().includes(q)) ||
-        (room.hostName && room.hostName.toLowerCase().includes(q));
+  const filteredPublicRooms = useMemo(
+    () =>
+      filterPublicRooms(publicRooms, {
+        searchQuery,
+        filterMode,
+        selectedServer,
+      }),
+    [publicRooms, searchQuery, filterMode, selectedServer],
+  );
 
-      const matchesMode =
-        filterMode === "all" ||
-        (room.type || "mega").toLowerCase() === filterMode.toLowerCase();
-
-      const matchesServer =
-        normalizeServer(room.server) === normalizeServer(selectedServer);
-
-      const matchesHostOnline = room.hostOnline !== false;
-
-      return matchesSearch && matchesMode && matchesServer && matchesHostOnline;
-    });
-  }, [publicRooms, searchQuery, filterMode, selectedServer]);
-
-  // Client-side active room count for the selected server
-  const serverRoomsCount = useMemo(() => {
-    return publicRooms.filter(
-      (room) =>
-        normalizeServer(room.server) === normalizeServer(selectedServer) &&
-        room.hostOnline !== false
-    ).length;
-  }, [publicRooms, selectedServer]);
+  const serverRoomsCount = useMemo(
+    () => countPublicRoomsOnServer(publicRooms, selectedServer),
+    [publicRooms, selectedServer],
+  );
 
   // Aggregated platform stats (zero row egress — HEAD count query only)
   const [auctionStats, setAuctionStats] = useState({
@@ -298,6 +285,7 @@ const LandingPage = () => {
     setPublicRoomsLoading(true);
     setPublicRoomsError(null);
     try {
+      if (force) invalidatePublicRoomsCache();
       const rooms = await getPublicRooms(force);
       setPublicRooms(rooms || []);
       // Sync activeCount without firing an extra request (reads from consolidated cache)
@@ -315,6 +303,15 @@ const LandingPage = () => {
 
   useEffect(() => {
     fetchPublicRoomsList();
+  }, [fetchPublicRoomsList, selectedServer]);
+
+  useEffect(() => {
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      fetchPublicRoomsList(true);
+    };
+    const interval = setInterval(tick, 25_000);
+    return () => clearInterval(interval);
   }, [fetchPublicRoomsList]);
 
   const handleJoinPublicRoom = async (room) => {
@@ -1377,8 +1374,16 @@ const LandingPage = () => {
                               </div>
 
                               <div className="flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-[10px] text-gray-400 font-medium mt-0.5 truncate">
-                                <span className="px-1.5 py-0.5 rounded font-black text-[7px] sm:text-[8px] uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
-                                  WAITING
+                                <span
+                                  className={`px-1.5 py-0.5 rounded font-black text-[7px] sm:text-[8px] uppercase tracking-wider shrink-0 border ${
+                                    (room.status || 'waiting') === 'active'
+                                      ? 'bg-sky-500/20 text-sky-300 border-sky-500/30'
+                                      : (room.status || 'waiting') === 'paused'
+                                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                        : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                  }`}
+                                >
+                                  {(room.status || 'waiting').toUpperCase()}
                                 </span>
 
                                 <span className="shrink-0">•</span>

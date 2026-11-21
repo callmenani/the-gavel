@@ -18,6 +18,7 @@ import {
   updateAuctionRecord,
   flushTeamsData,
   fetchTeamsForAuction,
+  invalidatePublicRoomsCache,
 } from '../lib/directoryApi';
 import { IPL_PLAYERS } from '../data/players';
 import { evaluateBotBid } from '../lib/botEngine';
@@ -385,6 +386,8 @@ export const AuctionProvider = ({ children }) => {
 
       if (mirror.error) {
         console.warn('[auction] Failed to mirror new room to directory', mirror.error);
+      } else {
+        invalidatePublicRoomsCache();
       }
     } catch (sErr) {
       if (sErr?.code === 'ROOM_CODE_TAKEN') throw sErr;
@@ -593,7 +596,8 @@ export const AuctionProvider = ({ children }) => {
       }
 
       try {
-        await updateAuctionRecord(roomId, { status: 'active' });
+        await updateAuctionRecord(roomId, { status: 'active', host_online: 1 });
+        invalidatePublicRoomsCache();
       } catch (sErr) {
         // Non-fatal: RTDB status remains authoritative for the live auction.
         console.warn('[auction] Failed to mirror active status to directory', sErr);
@@ -2313,7 +2317,7 @@ export const AuctionProvider = ({ children }) => {
       if (next === lastHostOnlineSynced) return;
       lastHostOnlineSynced = next; // optimistic: parallel presence ticks won't double-write
       updateAuctionRecord(auctionId, { host_online: next })
-        .then(() => {})
+        .then(() => { invalidatePublicRoomsCache(); })
         .catch(() => { lastHostOnlineSynced = null; }); // allow a later retry
     };
 
