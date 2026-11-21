@@ -44,6 +44,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { TEAMS } from '../data/teams';
+import { isAuctionManagerUser } from '../lib/auctionRoles.js';
 import TextChat from '../components/TextChat';
 import PageLoader from '../components/PageLoader';
 import PageBackground from '../components/PageBackground';
@@ -250,7 +251,12 @@ const AuctionRoom = () => {
       // Bots never block consent (they auto-confirm in solo; in cloud they are
       // not in the human tally), so only real managers count.
       return players.filter(
-         (p) => p && !p.isBot && !String(p.id).startsWith('bot_') && (p.team || p.name),
+         (p) =>
+           p &&
+           !p.isBot &&
+           !String(p.id).startsWith('bot_') &&
+           !p.isAuctionManager &&
+           (p.team || p.name),
       );
    }, [currentAuction?.players]);
 
@@ -787,7 +793,14 @@ const AuctionRoom = () => {
    // host went offline). Handover admins keep their role even when the host
    // returns, so this stays sticky too.
    const isHandoverAdmin = Boolean(currentAuction?.activeAdminId) && currentAuction.activeAdminId === user?.uid;
-   const isAdmin = isSoloVsBots || currentAuction?.hostId === user?.uid || Boolean(currentAuction?.admins?.[user?.uid]) || isHandoverAdmin;
+   const isAuctionManagerSelf = isAuctionManagerUser(currentAuction, user?.uid);
+   const isAdmin =
+     isSoloVsBots ||
+     currentAuction?.hostId === user?.uid ||
+     Boolean(currentAuction?.admins?.[user?.uid]) ||
+     isHandoverAdmin ||
+     isAuctionManagerSelf;
+   const noBidMode = spectateMode || isAuctionManagerSelf;
    const isHostBanner = isHandoverAdmin && currentAuction?.hostId !== user?.uid;
    const currentBid = displayAuctionState?.currentBid || 0;
    const nextBidAmount = getNextBidAmount(currentPlayer, currentBid);
@@ -1246,7 +1259,7 @@ const AuctionRoom = () => {
    };
 
    // Team Selection Guard — show team picker or "room full" error (unless in Spectate Mode or Local Solo Room)
-   if (!spectateMode && !team && !loading && user && !isSoloVsBots) {
+   if (!noBidMode && !team && !loading && user && !isSoloVsBots) {
       const takenTeamIds = new Set(roomTeams.map(t => t.teamId));
       (currentAuction?.players || []).forEach(p => { if (p.team) takenTeamIds.add(p.team); });
       const availableTeams = TEAMS.filter(t => !takenTeamIds.has(t.id));
@@ -2207,7 +2220,7 @@ const AuctionRoom = () => {
                                     })()}
 
                                     {/* Quick Jump Bid Buttons */}
-                                    {!spectateMode && displayAuctionState?.status === 'bidding' && (
+                                    {!noBidMode && displayAuctionState?.status === 'bidding' && (
                                        <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 px-1">
                                           <span className="text-[10px] font-pixel text-slate-400 uppercase tracking-widest mr-auto hidden xs:inline">Jump Bid:</span>
                                           {[1, 1.5, 2].map((jump) => {
@@ -2236,7 +2249,7 @@ const AuctionRoom = () => {
                                     <div className="flex gap-2 sm:gap-3 md:gap-4">
                                        {/* Pass / Next Lot Button (Every Human Manager during bidding; Host during celebration).
                                            Hidden while the consent gate is open — the gate panel is the control surface there. */}
-                                       {!spectateMode && displayAuctionState?.status !== 'awaiting_consent' && (displayAuctionState?.status === 'bidding' || isAdmin) && (
+                                       {!noBidMode && displayAuctionState?.status !== 'awaiting_consent' && (displayAuctionState?.status === 'bidding' || isAdmin) && (
                                           <button
                                              type="button"
                                              onClick={handleSoloSkip}
@@ -2277,15 +2290,15 @@ const AuctionRoom = () => {
 
                                        <button
                                           onClick={() => handleBid()}
-                                          disabled={spectateMode || !team || displayAuctionState?.status !== 'bidding' || displayAuctionState?.highBidderId === user?.uid}
-                                          className={`flex-1 h-12 sm:h-14 xl:h-18 font-black text-sm sm:text-base xl:text-xl rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale cursor-pointer ${spectateMode
+                                          disabled={noBidMode || !team || displayAuctionState?.status !== 'bidding' || displayAuctionState?.highBidderId === user?.uid}
+                                          className={`flex-1 h-12 sm:h-14 xl:h-18 font-black text-sm sm:text-base xl:text-xl rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale cursor-pointer ${noBidMode
                                              ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                                              : displayAuctionState?.highBidderId === user?.uid
                                                 ? 'bg-white/5 text-green-500 border border-green-500/20 shadow-inner'
                                                 : 'bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-wider shadow-[0_10px_30px_rgba(16,185,129,0.2)]'
                                              }`}
                                        >
-                                          {spectateMode ? (
+                                          {noBidMode ? (
                                              <span className="flex items-center gap-2 text-xs xl:text-sm font-black uppercase tracking-widest text-blue-400">
                                                 <Eye size={18} /> Spectator View (Read Only)
                                              </span>

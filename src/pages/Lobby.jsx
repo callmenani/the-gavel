@@ -24,7 +24,13 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { TEAMS } from '../data/teams';
-import { countAuctionTeams, MIN_TEAMS_TO_START } from '../lib/auctionRules';
+import { countAuctionTeams, MIN_TEAMS_TO_START, MAX_FRANCHISE_SLOTS } from '../lib/auctionRules';
+import {
+  auctionManagerSlotOpen,
+  canOperateAuction,
+  isAuctionManagerUser,
+  isDedicatedAdminLayout,
+} from '../lib/auctionRoles.js';
 import { formatCrores, toFiniteNumber } from '../lib/auctionDisplay';
 import TextChat from '../components/TextChat';
 import Footer from '../components/Footer';
@@ -64,7 +70,19 @@ const Lobby = () => {
   useDocumentTitle(`Lobby ${id ? `#${id}` : ''} | TheGavel`, 'Live franchise team selection and auction hub.', true);
   const { server, ready: serverReady } = useRoomServer(id);
   const { user, loginWithGoogle, loginAsGuest, loading: authLoading } = useAuth();
-  const { joinAuction, currentAuction, loading: auctionLoading, messages, kickPlayer, updatePlayerTeam, startAuction, joinRoomDb, removeBotTeam, fillEmptyTeamsWithBots } = useAuction();
+  const {
+    joinAuction,
+    currentAuction,
+    loading: auctionLoading,
+    messages,
+    kickPlayer,
+    updatePlayerTeam,
+    startAuction,
+    joinRoomDb,
+    removeBotTeam,
+    fillEmptyTeamsWithBots,
+    assignAuctionManager,
+  } = useAuction();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState('players');
@@ -84,7 +102,9 @@ const Lobby = () => {
     return params.get('spectate') === 'true';
   });
 
-  const isAdmin = currentAuction?.hostId === user?.uid;
+  const isAdmin = canOperateAuction(currentAuction, user?.uid);
+  const isRoomHost = currentAuction?.hostId === user?.uid;
+  const isAuctionManagerSelf = isAuctionManagerUser(currentAuction, user?.uid);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   // Keep the public directory in sync so new rooms show up for other players.
@@ -526,7 +546,36 @@ const Lobby = () => {
     );
   }
 
-  if (!spectateMode && (!isJoined || !currentUserPlayer?.team)) {
+  const handleJoinAsAuctionManager = async () => {
+    if (!auctionManagerSlotOpen(currentAuction)) return;
+    setIsUpdatingSettings(true);
+    setActionError(null);
+    try {
+      await joinRoomDb(
+        id,
+        user.uid,
+        { name: user.displayName || 'Manager', joinAsAuctionManager: true },
+        server,
+      );
+    } catch (err) {
+      console.error('[lobby] join as auction manager failed', err);
+      setActionError(err?.message || 'Could not join as auction manager.');
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
+
+  const handleAssignAuctionManager = async (player) => {
+    if (!isRoomHost || !player?.id) return;
+    setActionError(null);
+    try {
+      await assignAuctionManager(id, player.id, player.name);
+    } catch (err) {
+      setActionError(err?.message || 'Could not assign auction manager.');
+    }
+  };
+
+  if (!spectateMode && !isAuctionManagerSelf && (!isJoined || !currentUserPlayer?.team)) {
     // ═══ TEAM SELECTION OVERLAY ═══
     return (
       <div className="relative min-h-screen bg-transparent flex flex-col items-center py-12 px-4 font-sans text-white overflow-x-hidden">
@@ -567,6 +616,16 @@ const Lobby = () => {
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 mt-10 sm:mt-12">
+            {isDedicatedAdminLayout(currentAuction) && auctionManagerSlotOpen(currentAuction) && (
+              <button
+                type="button"
+                onClick={handleJoinAsAuctionManager}
+                disabled={isUpdatingSettings}
+                className="px-5 py-2.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-100 font-black text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center gap-2 active:scale-95 disabled:opacity-50"
+              >
+                <Crown size={15} /> Join as Auction Manager
+              </button>
+            )}
             <button
               onClick={() => setSpectateMode(true)}
               className="px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center gap-2 active:scale-95"
@@ -855,11 +914,18 @@ const Lobby = () => {
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <p className="font-black text-xs sm:text-sm text-white uppercase tracking-tight truncate max-w-[160px] sm:max-w-none">{player.name}</p>
                                 {player.isHost && <Crown size={13} className="text-amber-300 fill-amber-300 shrink-0" />}
+                                {player.isAuctionManager && (
+                                  <span className="text-[8px] font-black bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/25 shrink-0">
+                                    AUCTION MGR
+                                  </span>
+                                )}
                                 {(player.isBot || player.id.startsWith('bot_')) && <span className="text-[8px] font-black bg-white/10 text-slate-300 px-1.5 py-0.5 rounded border border-white/15 flex items-center gap-1 shrink-0"><Zap size={8} /> AI BOT</span>}
                                 {player.id === user?.uid && <span className="text-[8px] font-black bg-white/10 px-1.5 py-0.5 rounded text-slate-400 shrink-0">YOU</span>}
                               </div>
                               <p className="text-[9px] text-slate-500 font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] mt-0.5 truncate">
-                                {playerTeam?.name || (player.team === '' ? 'CALIBRATING...' : player.team)}
+                                {player.isAuctionManager
+                                  ? 'Runs auction — cannot bid'
+                                  : (playerTeam?.name || (player.team === '' ? 'CALIBRATING...' : player.team))}
                               </p>
                             </div>
                           </div>
@@ -879,6 +945,20 @@ const Lobby = () => {
                                 title="Remove AI Bot"
                               >
                                 <UserMinus size={14} />
+                              </button>
+                            )}
+                            {isRoomHost
+                              && isDedicatedAdminLayout(currentAuction)
+                              && !player.team
+                              && !player.isBot
+                              && !player.isAuctionManager
+                              && player.id !== user?.uid && (
+                              <button
+                                type="button"
+                                onClick={() => handleAssignAuctionManager(player)}
+                                className="px-2 py-1 text-[8px] font-black uppercase tracking-wider text-amber-300 border border-amber-500/30 rounded-lg hover:bg-amber-500/10"
+                              >
+                                Assign admin
                               </button>
                             )}
                             {isAdmin && !player.isHost && !(player.isBot || player.id.startsWith('bot_')) && (
