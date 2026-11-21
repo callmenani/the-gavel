@@ -100,7 +100,7 @@ export function simulateBotLot({
 }
 
 /**
- * Fast-forwards the remaining auction for bots.
+ * Fast-forwards the remaining auction for every franchise (human + bots).
  * If human is the leading bidder on the live lot, awards it to them first.
  * Then runs through remaining players in order until all lots are resolved.
  */
@@ -147,11 +147,10 @@ export function simulateRemainingAuction({
           hTeam.budgetRemaining = Math.max(0, toFiniteNumber(hTeam.budgetRemaining, initialBudget) - currentLive.currentBid);
         }
       } else {
-        // Let bots finish bidding on this lot
-        const botTeams = simulatedTeams.filter((t) => t.userId !== humanUserId);
+        // All franchises (human + bots) bid out the live lot during fast-forward
         const lotRes = simulateBotLot({
           player: livePlayer,
-          botTeams,
+          botTeams: simulatedTeams,
           currentBid: currentLive.currentBid || 0,
           highBidderId: currentLive.highBidderId || '',
           highBidderName: currentLive.highBidderName || '',
@@ -187,10 +186,9 @@ export function simulateRemainingAuction({
     const player = IPL_PLAYERS[pIdx];
     if (!player) continue;
 
-    const botTeams = simulatedTeams.filter((t) => t.userId !== humanUserId);
     const lotRes = simulateBotLot({
       player,
-      botTeams,
+      botTeams: simulatedTeams,
       currentBid: 0,
       highBidderId: '',
       highBidderName: '',
