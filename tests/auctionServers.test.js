@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
+
+process.env.VITE_ENABLED_SERVERS = 'server-1,server-2,server-3,server-4,server-5,server-6,server-7';
+for (let i = 1; i <= 7; i++) {
+  process.env[`VITE_RTDB_${i}_URL`] ||= `https://server-${i}-mock.firebaseio.com`;
+}
+
+const {
   AUCTION_SERVERS,
   DEFAULT_AUCTION_SERVER,
   PRIMARY_SERVER,
@@ -17,7 +23,7 @@ import {
   getServerMeta,
   normalizeServer,
   withServerParam,
-} from '../src/lib/auctionServers.js';
+} = await import('../src/lib/auctionServers.js');
 
 test('normalizeServer accepts known ids and aliases, and falls back safely', () => {
   assert.equal(normalizeServer('server-1'), SERVER_1);
