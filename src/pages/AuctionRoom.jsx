@@ -465,7 +465,10 @@ const AuctionRoom = () => {
    useEffect(() => {
       if (!serverReady) return;
       if (currentAuction?.status === 'completed') {
-         navigate(withServerParam(`/summary/${id}`, server), { replace: true });
+         navigate(withServerParam(`/summary/${id}`, server), {
+           replace: true,
+           state: { defaultTab: 'league' },
+         });
       } else if (currentAuction?.status === 'waiting') {
          navigate(withServerParam(`/lobby/${id}`, server), { replace: true });
       }

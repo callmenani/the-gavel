@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuction } from '../contexts/AuctionContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useQuota } from '../contexts/QuotaContext';
@@ -37,6 +37,11 @@ import useRoomServer from '../hooks/useRoomServer';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { isLocalRoom, loadLocalSoloRoom } from '../lib/localAuctionEngine';
 import {
+  loadSummarySnapshot,
+  normalizeSummaryAuction,
+  normalizeSummaryTeams,
+} from '../lib/summarySnapshot';
+import {
   computeTeamSpent,
   countOverseas,
   formatCrores,
@@ -50,12 +55,17 @@ const AuctionSummary = () => {
   const { id } = useParams();
   useDocumentTitle(`Auction Summary #${id || ''} | TheGavel`, 'Final squad rosters and auction summary.', true);
   const navigate = useNavigate();
+  const location = useLocation();
   const { server, ready: serverReady } = useRoomServer(id);
   const { currentAuction, roomTeams } = useAuction();
   const { user } = useAuth();
   const { handleFirebaseError } = useQuota();
   
-  const [activeTab, setActiveTab] = useState('sheet');
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = location.state?.defaultTab;
+    const allowed = ['squads', 'sheet', 'leaderboard', 'fantasy', 'league'];
+    return allowed.includes(tab) ? tab : 'sheet';
+  });
   const [expandedTeam, setExpandedTeam] = useState(null);
   const [sharingTeamId, setSharingTeamId] = useState(null);
   const [copiedTeamId, setCopiedTeamId] = useState(null);
@@ -146,19 +156,31 @@ const AuctionSummary = () => {
   // connections or quota usage.
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !serverReady) return;
     let isMounted = true;
-
-    // If live auction data is already present in memory from this active session, dismiss loading
-    if (currentAuction && currentAuction.id === id && roomTeams && roomTeams.length > 0) {
-      setSummaryLoading(false);
-    }
 
     const fetchSummaryFromPersistentStore = async () => {
       setSummaryLoading(true);
       setSummaryError(null);
       try {
-        const isLocal = isLocalRoom(id, server, true) || (typeof id === 'string' && id.startsWith('SOLO-')) || server === 'local';
+        const hasLocalStore = Boolean(loadLocalSoloRoom(id));
+        const isLocal = isLocalRoom(id, server, hasLocalStore);
+
+        if (currentAuction?.id === id && roomTeams?.length > 0) {
+          if (isMounted) {
+            setDbAuction(normalizeSummaryAuction(currentAuction, id));
+            setDbTeams(normalizeSummaryTeams(roomTeams, id));
+            setSummaryLoading(false);
+          }
+        }
+
+        const snapshot = loadSummarySnapshot(id);
+        if (snapshot?.auction && snapshot.teams?.length && isMounted) {
+          setDbAuction(normalizeSummaryAuction(snapshot.auction, id));
+          setDbTeams(normalizeSummaryTeams(snapshot.teams, id));
+          setSummaryLoading(false);
+        }
+
         if (isLocal) {
           const localData = loadLocalSoloRoom(id);
           if (localData && isMounted) {
@@ -174,12 +196,14 @@ const AuctionSummary = () => {
               settings: localData.settings || {},
               fastForwarded: Boolean(localData.fastForwarded),
             });
-            setDbTeams(localData.roomTeams || localData.teams || []);
+            setDbTeams(normalizeSummaryTeams(localData.roomTeams || localData.teams || [], id));
             setSummaryLoading(false);
             return;
           }
-          // No local save (cleared browser / another device): the completed
-          // auction may still have been copied to Supabase, so fall through.
+          // No local save: try snapshot (already applied) or cloud directory below.
+          if (snapshot?.teams?.length) {
+            return;
+          }
         }
 
         // 1. Persistent Directory store
@@ -328,7 +352,7 @@ const AuctionSummary = () => {
     fetchSummaryFromPersistentStore();
 
     return () => { isMounted = false; };
-  }, [id, summaryReloadKey]);
+  }, [id, summaryReloadKey, server, serverReady, currentAuction, roomTeams, handleFirebaseError]);
 
   const activeAuction = (currentAuction && currentAuction.id === id) ? currentAuction : dbAuction;
   const activeTeams = (roomTeams && roomTeams.length > 0 && currentAuction?.id === id) ? roomTeams : dbTeams;
@@ -376,7 +400,7 @@ const AuctionSummary = () => {
   const topPlayers = allSoldPlayers.slice(0, 5);
 
   if (!activeAuction && summaryError) {
-    const isDeviceNotFound = summaryError === 'device_not_found' || (typeof id === 'string' && id.startsWith('SOLO-')) || server === 'local';
+    const isDeviceNotFound = summaryError === 'device_not_found';
     return (
       <div className="h-screen-safe bg-[#050505] text-white flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto">
         <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4 text-gray-300">

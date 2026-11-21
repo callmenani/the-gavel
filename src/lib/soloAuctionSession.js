@@ -1,5 +1,6 @@
 import { localAuctionReducer, saveLocalSoloRoom, isLocalRoom } from './localAuctionEngine.js';
 import { SERVER_LOCAL, withServerParam } from './auctionServers.js';
+import { cacheSummarySnapshot } from './summarySnapshot.js';
 
 /**
  * Calculates adaptive reaction delays for bot bidding, matching cloud room dynamics.
@@ -241,8 +242,13 @@ export async function handleSoloEndAuction({
     if (next && saveFn) {
       saveFn(next, synced);
     }
+    if (next) {
+      cacheSummarySnapshot(roomId, next, next.roomTeams || next.teams || []);
+    }
     if (navigate) {
-      navigate(withServerParam(`/summary/${roomId}`, SERVER_LOCAL));
+      navigate(withServerParam(`/summary/${roomId}`, SERVER_LOCAL), {
+        state: { defaultTab: 'league' },
+      });
     }
     return { handled: true, next, synced };
   }
