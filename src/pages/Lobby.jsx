@@ -87,6 +87,17 @@ const Lobby = () => {
   const isAdmin = currentAuction?.hostId === user?.uid;
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
+  // Keep the public directory in sync so new rooms show up for other players.
+  useEffect(() => {
+    if (!isAdmin || !id || currentAuction?.isPublic === false) return undefined;
+    if (currentAuction?.status !== 'waiting' && currentAuction?.status !== 'active') return undefined;
+    updateAuctionRecord(id, {
+      status: currentAuction.status,
+      host_online: 1,
+    }).catch(() => {});
+    return undefined;
+  }, [isAdmin, id, currentAuction?.status, currentAuction?.isPublic]);
+
   const handleExitRequest = () => {
     if (isAdmin && currentAuction?.status === 'waiting') {
       setShowExitConfirm(true);

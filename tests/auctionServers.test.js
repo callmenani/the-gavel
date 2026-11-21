@@ -97,23 +97,17 @@ test('SERVER_LOCAL is recognized, normalized, and flagged as isLocal', () => {
   assert.match(localMeta.label, /Local/i);
 });
 
-test('client-side room count dynamically filters by server and host status', () => {
+test('client-side room count filters by server via publicRoomsFilter', async () => {
+  const { countPublicRoomsOnServer } = await import('../src/lib/publicRoomsFilter.js');
   const rooms = [
-    { id: 'R1', server: 'server-1', hostOnline: true },
-    { id: 'R2', server: 'server-1', hostOnline: false }, // host offline, skipped
-    { id: 'R3', server: 'server-2', hostOnline: true },
-    { id: 'R4', server: 'server-2', hostOnline: true },
-    { id: 'R5', server: undefined, hostOnline: true }, // missing server -> defaults to server-1
+    { id: 'R1', server: 'server-1', status: 'waiting', hostOnline: true },
+    { id: 'R2', server: 'server-1', status: 'waiting', hostOnline: false },
+    { id: 'R3', server: 'server-2', status: 'active', hostOnline: false },
+    { id: 'R4', server: 'server-2', status: 'waiting', hostOnline: true },
+    { id: 'R5', server: undefined, status: 'waiting', hostOnline: true },
   ];
 
-  const countFor = (targetServer) =>
-    rooms.filter(
-      (r) =>
-        normalizeServer(r.server) === normalizeServer(targetServer) &&
-        r.hostOnline !== false,
-    ).length;
-
-  assert.equal(countFor('server-1'), 2); // R1 and R5 (defaulted)
-  assert.equal(countFor('server-2'), 2); // R3 and R4
-  assert.equal(countFor('server-3'), 0); // none
+  assert.equal(countPublicRoomsOnServer(rooms, 'server-1'), 2);
+  assert.equal(countPublicRoomsOnServer(rooms, 'server-2'), 2);
+  assert.equal(countPublicRoomsOnServer(rooms, 'server-3'), 0);
 });

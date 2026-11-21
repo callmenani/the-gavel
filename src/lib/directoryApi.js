@@ -85,7 +85,18 @@ async function request(endpoint, options = {}) {
 }
 
 const PUBLIC_ROOMS_TTL_MS = 20 * 1000; // 20s in-session cache
-const PUBLIC_ROOMS_KEY = 'thegavel_cache_public_rooms';
+export const PUBLIC_ROOMS_KEY = 'thegavel_cache_public_rooms';
+
+export function invalidatePublicRoomsCache() {
+  removeStorageCache(
+    typeof sessionStorage !== 'undefined' ? sessionStorage : null,
+    PUBLIC_ROOMS_KEY,
+  );
+  removeStorageCache(
+    typeof sessionStorage !== 'undefined' ? sessionStorage : null,
+    PLATFORM_STATS_KEY,
+  );
+}
 const PLATFORM_STATS_TTL_MS = 60 * 1000; // 60s in-session cache
 const PLATFORM_STATS_KEY = 'thegavel_cache_platform_stats';
 
@@ -94,6 +105,10 @@ const PLATFORM_STATS_KEY = 'thegavel_cache_platform_stats';
  * Edge-cached on Cloudflare + 20s in sessionStorage.
  */
 export async function getPublicRooms(force = false) {
+  if (!API_BASE_URL) {
+    console.warn('[directoryApi] VITE_DIRECTORY_API_URL is not set; public lobby list unavailable.');
+    return [];
+  }
   if (!force) {
     const cached = readStorageCache(
       typeof sessionStorage !== 'undefined' ? sessionStorage : null,
@@ -243,6 +258,7 @@ export async function updateAuctionRecord(roomId, updates) {
       typeof sessionStorage !== 'undefined' ? sessionStorage : null,
       `thegavel_cache_room_${roomId}`,
     );
+    invalidatePublicRoomsCache();
     return { data: res, error: null };
   } catch (err) {
     console.warn('[directoryApi] Failed to update auction', err);
