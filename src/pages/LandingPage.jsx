@@ -53,17 +53,16 @@ import {
   Clock,
   Plus,
   Cloud,
+  ArrowLeft,
+  Swords,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
 import ConfirmDialog from "../components/ConfirmDialog";
-import AuctionActivityFeed from "../components/AuctionActivityFeed";
+import PlayersUnderHammer from "../components/PlayersUnderHammer";
 import Footer from "../components/Footer";
 import AdSlot from "../components/AdSlot";
-import CommunitySection from "../components/community/CommunitySection";
-import CommunityBanner from "../components/community/CommunityBanner";
 import ServerSwitcher from "../components/ServerSwitcher";
 import PageBackground from "../components/PageBackground";
-import PanelSurface from "../components/PanelSurface";
+import { Brand, LivePill, TeamMark } from "../components/figma/FigmaShell";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import {
   computeTeamSpent,
@@ -72,6 +71,14 @@ import {
   isOverseasPlayer,
   toFiniteNumber,
 } from "../lib/auctionDisplay";
+
+/** Auction modes, in the order the design presents them. */
+const MODES = [
+  { id: "mega", label: "Mega", icon: Trophy, players: "25 Players", purse: "₹120 Cr Budget", blurb: "Full mega auction" },
+  { id: "sprint11", label: "Classic", icon: Star, players: "11 Players", purse: "₹90 Cr Budget", blurb: "Eleven-player draft" },
+  { id: "sprint5", label: "Sprint", icon: Zap, players: "5 Players", purse: "₹60 Cr Budget", blurb: "Fast five-player run" },
+  { id: "legends", label: "Legends", icon: Crown, players: "11 Players", purse: "₹100 Cr Budget", blurb: "All-time legends XI" },
+];
 
 /** Device-local solo saves shaped like the cloud history rows. */
 const buildLocalHistorySessions = (userId) =>
@@ -156,12 +163,12 @@ const isSessionLocal = (session) =>
 const LandingPage = () => {
   useDocumentTitle(
     "CrickAuction - Multiplayer T20 Auction Simulator | Fan-Made Cricket Game",
-    "An independent, fan-made multiplayer T20 cricket auction simulator. Host tactical auctions with friends, manage squad budgets, and draft your dream T20 squad.",
+    "An independent, fan-made multiplayer T20 cricket auction simulator. Host tactical auctions with friends, manage squad budgets, and draft your dream T20 squad."
   );
 
   const [selectedTeam, setSelectedTeam] = useState("MI");
   const [activeTab, setActiveTab] = useState("new");
-  const [auctionType, setAuctionType] = useState("mega"); 
+  const [auctionType, setAuctionType] = useState("mega");
   const [playSolo, setPlaySolo] = useState(false);
   const [isPublicRoom, setIsPublicRoom] = useState(true);
   const [roomCode, setRoomCode] = useState("");
@@ -266,7 +273,7 @@ const LandingPage = () => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("error") === "kicked") {
       setError(
-        "ACCESS DENIED: You have been removed from that hub by the host.",
+        "ACCESS DENIED: You have been removed from that hub by the host."
       );
       // Clean up the error flag without losing the server hint.
       params.delete("error");
@@ -274,7 +281,7 @@ const LandingPage = () => {
       window.history.replaceState(
         {},
         document.title,
-        `${window.location.pathname}${query ? `?${query}` : ""}`,
+        `${window.location.pathname}${query ? `?${query}` : ""}`
       );
     }
   }, []);
@@ -297,8 +304,6 @@ const LandingPage = () => {
       // Best-effort stats - UI falls back to animated activity indicator
     }
   }, []);
-
-  // fetchAuctionStats is retained for manual refreshes; mount sync is handled by fetchPublicRoomsList
 
   // Fetch active public rooms & synced stats from Cloudflare D1
   const fetchPublicRoomsList = useCallback(async (force = false) => {
@@ -431,11 +436,11 @@ const LandingPage = () => {
 
   const cloudSessionsCount = useMemo(
     () => historyData.filter((s) => !isSessionLocal(s)).length,
-    [historyData],
+    [historyData]
   );
   const localSessionsCount = useMemo(
     () => historyData.filter((s) => isSessionLocal(s)).length,
-    [historyData],
+    [historyData]
   );
 
   const filteredHistory = useMemo(() => {
@@ -445,7 +450,7 @@ const LandingPage = () => {
     return historyData.filter(
       (session) =>
         session.server === historyFilter ||
-        normalizeServer(session.server) === historyFilter,
+        normalizeServer(session.server) === historyFilter
     );
   }, [historyData, historyFilter]);
 
@@ -474,24 +479,21 @@ const LandingPage = () => {
       console.error("[history] Failed to delete auction session", err);
       // Roll back the optimistic removal if the server delete failed
       setHistoryData((prev) =>
-        prev.some((item) => item.id === teamDocId) ? prev : [session, ...prev],
+        prev.some((item) => item.id === teamDocId) ? prev : [session, ...prev]
       );
       setError("Could not delete this room. Please try again.");
       setTimeout(() => setError(""), 3000);
       return;
     }
 
-    // 3. Remove room from the room's own Realtime Database if still sitting in
+    // Remove room from the room's own Realtime Database if still sitting in
     // waiting state. Never clean up the other server's namespace.
     if (isServerAvailable(session.server)) {
       try {
         await remove(ref(getRtdb(session.server), `auctions/${roomId}`));
       } catch (err) {
         // The Supabase rows are already gone; RTDB cleanup is best-effort.
-        console.warn(
-          "[history] Failed to remove deleted auction from RTDB",
-          err,
-        );
+        console.warn("[history] Failed to remove deleted auction from RTDB", err);
       } finally {
         // Deleting history must not leave a browse-time socket open.
         goOfflineServer(session.server);
@@ -588,15 +590,12 @@ const LandingPage = () => {
               { name: displayName, team: selectedTeam },
               auctionType,
               isPublicRoom,
-              selectedServer,
+              selectedServer
             );
             newRoomId = candidate;
             break;
           } catch (createError) {
-            if (
-              createError?.code !== "ROOM_CODE_TAKEN" ||
-              attempt === 3
-            ) {
+            if (createError?.code !== "ROOM_CODE_TAKEN" || attempt === 3) {
               throw createError;
             }
           }
@@ -613,7 +612,7 @@ const LandingPage = () => {
         }
         if (result?.fellBack) {
           setNotice(
-            `${getServerMeta(result.requestedServer).label} was full, so this room was created on ${getServerMeta(actualServer).label}.`,
+            `${getServerMeta(result.requestedServer).label} was full, so this room was created on ${getServerMeta(actualServer).label}.`
           );
           setTimeout(() => setNotice(""), 6000);
         }
@@ -636,1318 +635,960 @@ const LandingPage = () => {
       // createRoom/joinRoomDb may have opened a probe socket before failing.
       // The landing page must stay browse-only; the room page will reconnect.
       goOfflineServer(getActiveServer());
-      setError(
-        error.message || "Failed to create/join room. Please try again.",
-      );
+      setError(error.message || "Failed to create/join room. Please try again.");
       setTimeout(() => setError(""), 3000);
       setIsSubmitting(false);
     }
   };
 
-  // ─── Not Signed In: Show Google / Guest Login ───
+  const activeMode = MODES.find((m) => m.id === auctionType) || MODES[0];
+  const pickedTeam = TEAMS.find((t) => t.id === selectedTeam);
+
+  const suggestedRoomCode = useMemo(() => generateRoomCode(), []);
+  const displayRoomCode = roomCode.trim() ? roomCode.trim().toUpperCase() : suggestedRoomCode;
+
+  // ─── The shared hero, used by both the signed-out and signed-in states ───
+  const hero = (
+    <div className="fs-hero">
+      <p className="fs-eyebrow">
+        {playSolo ? "Solo vs AI Bots" : `${activeMode.label} Auction`} · Step 01
+      </p>
+      <h1>
+        Build your legacy
+        <br />
+        <em>is yours.</em>
+      </h1>
+      <p>
+        The ultimate multiplayer IPL auction simulator and game. Host live IPL
+        mega auctions with friends in real-time, choose your favourite
+        franchise, bid strategically, and build a championship T20 squad.
+      </p>
+
+      <div className="fs-rule-strip">
+        <span>
+          <b>{activeMode.players.split(" ")[0]}</b>
+          {activeMode.players.split(" ")[1]} squads
+        </span>
+        <span>
+          <b>{activeMode.purse.split(" ")[0]}</b>
+          starting purse
+        </span>
+        <span>
+          <b>{playSolo ? "9" : "10"}</b>
+          {playSolo ? "AI franchises" : "franchises"}
+        </span>
+        <span>
+          <b>{serverRoomsCount}</b>
+          live right now
+        </span>
+      </div>
+    </div>
+  );
+
+  // ─── Not Signed In: Google / Guest login inside the selection panel ───
   if (!user) {
     return (
-      <div className="relative min-h-screen bg-transparent flex flex-col font-sans text-white overflow-x-clip">
-        <PageBackground />
+      <div className="fs-app fs-select-page">
+        <PageBackground showArt={false} />
+        <div className="fs-stadium" aria-hidden="true" />
 
-        <div className="relative z-50 w-full">
-          <CommunityBanner />
-          <Navbar />
-        </div>
-        <main className="relative w-full flex-1 flex flex-col items-center justify-start pt-6 sm:pt-8 px-3 sm:px-4 z-10 pb-20 sm:pb-32">
+        <header className="fs-landing-header" style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "space-between", height: 84, borderBottom: "1px solid var(--fs-line)" }}>
+          <Brand />
+          <LivePill>{serverRoomsCount} auctions live</LivePill>
+        </header>
 
-        <div className="text-center mb-3 sm:mb-4 z-10 relative max-w-2xl px-2 sm:px-4 mt-1 sm:mt-2">
-          <h1 className="sr-only">
-            CrickAuction - Fan-Made Multiplayer T20 Cricket Auction Simulator
-          </h1>
+        {hero}
 
-          <div className="text-[clamp(1.25rem,2.8vw,2.35rem)] font-pixel leading-none text-balance bg-clip-text text-transparent bg-gradient-to-b from-white via-white/90 to-white/60">
-            CREATE YOUR
+        <div className="fs-panel">
+          <div className="fs-panel-heading">
+            <div>
+              <span>Step 01 — Sign in</span>
+              <h2>Enter the auction room</h2>
+            </div>
+            <p>Sign in to claim a franchise, invite friends and start bidding.</p>
           </div>
-          <div className="text-[clamp(2.1rem,5.6vw,3.85rem)] font-pixel leading-none uppercase text-balance mt-0.5 sm:mt-1 drop-shadow-[0_2px_12px_rgba(255,255,255,0.08)]">
-            AUCTION ROOM
-          </div>
 
-          <p className="text-xs sm:text-[13px] text-slate-400 font-pixel max-w-lg mx-auto mt-2 leading-relaxed px-1">
-            The ultimate multiplayer IPL auction simulator and game. Host live
-            IPL mega auctions with friends in real-time, choose your favorite
-            franchise, bid strategically, and build a championship T20 squad.
-          </p>
-
-          {/* Watermelon-style Micro Step Indicators */}
-          <div className="inline-flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 mt-2.5 sm:mt-3 px-3 py-1.5 rounded-xl bg-white/[0.02] border border-dashed border-white/10 text-[8.5px] sm:text-[9.5px] font-black tracking-wider sm:tracking-widest text-slate-400 uppercase select-none">
-            <span className="hover:text-slate-200 transition-colors">
-              ① Create Room
-            </span>
-            <span className="text-white/20">➔</span>
-            <span className="hover:text-slate-200 transition-colors">
-              ② Invite Friends
-            </span>
-            <span className="text-white/20">➔</span>
-            <span className="hover:text-slate-200 transition-colors">
-              ③ Start Bidding
-            </span>
-          </div>
-        </div>
-
-        <PanelSurface className="mt-2 sm:mt-3">
-          <div className="bg-[#0c0d10] rounded-[2.2rem] border border-white/10 grid grid-cols-1 lg:grid-cols-12 gap-0 items-stretch divide-y lg:divide-y-0 lg:divide-x divide-white/10 overflow-hidden">
-            {/* Left Side: Live Activity Feed */}
-            <div className="lg:col-span-7 w-full flex flex-col p-6 md:p-8 relative">
-              <AuctionActivityFeed stats={auctionStats} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 border-t border-[var(--fs-line-soft)]">
+            <div className="p-6 sm:p-8 border-b lg:border-b-0 lg:border-r border-[var(--fs-line-soft)]">
+              <PlayersUnderHammer stats={auctionStats} />
             </div>
 
-            {/* Right Side: Welcome Login Form */}
-            <div className="lg:col-span-5 w-full p-8 md:p-10 flex flex-col items-center justify-center">
-              <h2 className="text-xl font-black uppercase tracking-tight mb-1">
-                {isGuestMode ? "Guest Access" : "Welcome, Manager"}
-              </h2>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-8">
-                {isGuestMode
-                  ? "Enter a name to join"
-                  : "Sign in to enter the auction hub"}
-              </p>
+            <div className="p-6 sm:p-8 fs-auth">
+              <div className="fs-auth-head">
+                <h2>{isGuestMode ? "Guest Access" : "Welcome, Manager"}</h2>
+                <p>{isGuestMode ? "Enter a name to join" : "Sign in to enter the auction hub"}</p>
+              </div>
 
               {!isGuestMode ? (
-                <div className="w-full space-y-4">
+                <div className="fs-auth-form">
                   <button
+                    type="button"
                     onClick={handleGoogleSignIn}
-                    className="w-full h-12 sm:h-14 relative overflow-hidden group/submit rounded-xl bg-white hover:bg-slate-200 text-black shadow-[0_10px_30px_rgba(255,255,255,0.08)] cursor-pointer transition-all active:scale-[0.98]"
+                    disabled={isSubmitting}
+                    className="fs-google-btn"
                   >
-                    <div className="relative flex items-center justify-center gap-2.5 sm:gap-3 font-black uppercase tracking-[0.12em] sm:tracking-[0.2em] text-xs sm:text-sm">
-                      <svg
-                        viewBox="0 0 24 24"
-                        width="16"
-                        height="16"
-                        className="fill-current sm:w-[18px] sm:h-[18px]"
-                      >
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                      </svg>
-                      <span>Continue with Google</span>
-                    </div>
+                    <svg viewBox="0 0 48 48" width="19" height="19" aria-hidden="true">
+                      <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z" />
+                      <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z" />
+                      <path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z" />
+                      <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z" />
+                    </svg>
+                    <span>Continue with Google</span>
                   </button>
 
-                  <div className="relative py-2 flex items-center justify-center">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-white/5" />
-                    </div>
-                    <span className="relative bg-[#0c0d10] px-4 text-[9px] font-black text-gray-400 uppercase tracking-widest italic">
-                      Wait, I'm a guest
-                    </span>
+                  <div className="fs-auth-mark">
+                    <span>or</span>
                   </div>
 
                   <button
+                    type="button"
                     onClick={() => setIsGuestMode(true)}
-                    className="w-full h-14 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center gap-3 text-gray-400 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all font-black uppercase tracking-[0.2rem] text-xs cursor-pointer active:scale-[0.98]"
+                    className="fs-guest-btn"
                   >
-                    <Users size={18} /> Join as Guest
+                    <Users size={17} /> Join as Guest
                   </button>
                 </div>
               ) : (
-                <form onSubmit={handleGuestSignIn} className="w-full space-y-4">
-                  <div className="space-y-2">
-                    <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">
-                      Your Manager Name
-                    </label>
+                <form onSubmit={handleGuestSignIn} className="fs-auth-form">
+                  <label className="fs-auth-field">
+                    <span className="fs-label">Your manager name</span>
                     <input
                       type="text"
                       value={guestName}
                       onChange={(e) => setGuestName(e.target.value)}
                       placeholder="e.g. MS Dhoni"
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-white font-black uppercase text-sm tracking-widest placeholder:text-gray-800 focus:outline-none focus:border-white/30 transition-all"
+                      className="fs-auth-input"
                       autoFocus
                     />
-                  </div>
+                  </label>
 
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full h-14 relative overflow-hidden group/submit rounded-xl bg-white hover:bg-slate-200 text-black shadow-[0_10px_30px_rgba(255,255,255,0.08)] cursor-pointer transition-all active:scale-[0.98]"
+                    className="fs-primary-btn w-full"
+                    style={{ minWidth: 0 }}
                   >
-                    <div className="relative flex items-center justify-center gap-3 font-black uppercase tracking-[0.2em] text-sm">
-                      {isSubmitting ? (
-                        <Loader2 size={18} className="animate-spin" />
-                      ) : (
-                        <span>Start Auction Hub</span>
-                      )}
-                      {!isSubmitting && (
-                        <ChevronRight
-                          size={18}
-                          className="group-hover/submit:translate-x-1 transition-transform"
-                        />
-                      )}
-                    </div>
+                    {isSubmitting ? <Loader2 size={17} className="animate-spin" /> : <span>Start auction hub</span>}
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setIsGuestMode(false)}
-                    className="w-full text-[9px] font-black text-gray-400 hover:text-white uppercase tracking-[0.3em] transition-colors mt-2"
+                    className="fs-auth-back"
                   >
-                    ← Back to Google Login
+                    <ArrowLeft size={11} /> Back to Google login
                   </button>
                 </form>
               )}
 
-              {error && (
-                <p className="mt-4 text-xs text-red-500 font-bold">{error}</p>
-              )}
+              {error && <p className="fs-auth-error">{error}</p>}
             </div>
           </div>
-        </PanelSurface>
+        </div>
 
         <AdSlot className="mt-8 mb-4 px-2.5 sm:px-4" />
-
-        <CommunitySection />
-
         <Footer />
-      </main>
-    </div>
-  );
-}
 
-  // ─── Signed In: Show Create / Join / History ───
-  return (
-    <div className="relative min-h-screen bg-transparent flex flex-col font-sans text-white overflow-x-clip">
-      <PageBackground />
-
-      <div className="relative z-50 w-full">
-        <CommunityBanner />
-        <Navbar />
-      </div>
-      <main className="relative w-full flex-1 flex flex-col items-center justify-start pt-6 sm:pt-8 px-3 sm:px-4 z-10 pb-20 sm:pb-32">
-
-      {/* Hero */}
-      <div className="text-center mb-3 sm:mb-4 z-10 relative max-w-2xl px-2 sm:px-4 mt-1 sm:mt-2">
-        <h1 className="sr-only">
-          CrickAuction - Fan-Made Multiplayer T20 Cricket Auction Simulator
-        </h1>
-
-        <div className="text-[clamp(1.25rem,2.8vw,2.35rem)] font-pixel leading-none text-balance bg-clip-text text-transparent bg-gradient-to-b from-white via-white/90 to-white/60">
-          CREATE YOUR
-        </div>
-        <div className="text-[clamp(2.1rem,5.6vw,3.85rem)] font-pixel leading-none uppercase text-balance mt-0.5 sm:mt-1 drop-shadow-[0_2px_12px_rgba(255,255,255,0.08)]">
-          AUCTION ROOM
-        </div>
-
-        <p className="text-xs sm:text-[13px] text-slate-400 font-pixel max-w-lg mx-auto mt-2 leading-relaxed px-1">
-          The ultimate multiplayer IPL auction simulator and game. Host live IPL
-          mega auctions with friends in real-time, choose your favorite
-          franchise, bid strategically, and build a championship T20 squad.
+        <p className="fs-landing-footer">
+          Fan-made simulator · Not affiliated with BCCI, the IPL or any franchise
         </p>
-
-        {/* Watermelon-style Micro Step Indicators */}
-        <div className="inline-flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 mt-2.5 sm:mt-3 px-3 py-1.5 rounded-xl bg-white/[0.02] border border-dashed border-white/10 text-[8.5px] sm:text-[9.5px] font-black tracking-wider sm:tracking-widest text-slate-400 uppercase select-none">
-          <span className="hover:text-slate-200 transition-colors">
-            ① Create Room
-          </span>
-          <span className="text-white/20">➔</span>
-          <span className="hover:text-slate-200 transition-colors">
-            ② Invite Friends
-          </span>
-          <span className="text-white/20">➔</span>
-          <span className="hover:text-slate-200 transition-colors">
-            ③ Start Bidding
-          </span>
-        </div>
       </div>
+    );
+  }
 
-      <PanelSurface className="mt-2 sm:mt-3">
-        <div className="bg-[#0c0d10] rounded-[2.2rem] border border-white/10 grid grid-cols-1 lg:grid-cols-12 gap-0 items-stretch divide-y lg:divide-y-0 lg:divide-x divide-white/10 overflow-hidden">
-          {/* Left Side: Live signings */}
-          <div className="lg:col-span-5 w-full flex flex-col p-6 md:p-8 relative">
-            <AuctionActivityFeed stats={auctionStats} />
+  // ─── Signed In: Create / Join / History inside the selection panel ───
+  return (
+    <div className="fs-app fs-select-page">
+      <PageBackground showArt={false} />
+      <div className="fs-stadium" aria-hidden="true" />
+
+      <header
+        className="fs-landing-header"
+        style={{
+          position: "relative",
+          zIndex: 2,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+          height: 84,
+          borderBottom: "1px solid var(--fs-line)",
+        }}
+      >
+        <Brand />
+
+        <div className="flex items-center gap-3 sm:gap-4">
+          <LivePill className="hidden sm:flex">{serverRoomsCount} auctions live</LivePill>
+
+          {user.photoURL && (
+            <img
+              src={user.photoURL}
+              alt={user.displayName}
+              className="w-8 h-8 rounded-full border border-[var(--fs-line)]"
+            />
+          )}
+          <span className="hidden sm:block text-[10px] font-black text-[var(--fs-label)] uppercase tracking-widest">
+            {user.displayName}
+          </span>
+          <button
+            onClick={logout}
+            className="px-3 py-1.5 border border-[var(--fs-line)] bg-[var(--fs-card)] text-[9px] font-black text-[var(--fs-dim)] hover:text-white hover:border-white/40 uppercase tracking-widest transition-colors cursor-pointer"
+          >
+            Logout
+          </button>
+        </div>
+      </header>
+
+      {hero}
+
+      <div className="fs-panel">
+        {/* ── Panel heading carries the Create / Join / History tabs ── */}
+        <div className="fs-panel-heading flex-wrap gap-4">
+          <div>
+            <span>
+              {activeTab === "new" ? "Step 02 — Your franchise" : activeTab === "join" ? "Step 02 — Join a room" : "Your record"}
+            </span>
+            <h2>
+              {activeTab === "new" ? "Choose your franchise" : activeTab === "join" ? "Enter a room code" : "Auction ledger"}
+            </h2>
           </div>
 
-          {/* Right Side: Create/Join/History form */}
-          <div className="lg:col-span-7 w-full p-4 sm:p-6 md:p-8 flex flex-col">
-            {availableServers.length > 1 && !(activeTab === "new" && playSolo) && (
-              <div className="flex items-center justify-between gap-3 mb-4 sm:mb-6">
-                <div className="min-w-0">
-                  <span className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest block">
-                    Auction Server
-                  </span>
-                  <p className="text-[8px] sm:text-[9px] text-gray-500 font-medium mt-0.5">
-                    Lobbies and history are separate per server.
-                  </p>
-                </div>
-                <div className="shrink-0">
-                  <ServerSwitcher
-                    servers={availableServers}
-                    value={selectedServer}
-                    onChange={handleServerChange}
-                  />
-                </div>
-              </div>
-            )}
-            {/* Flat Tab Bar Navigation: Create / Join / History */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-white/5 mb-5 sm:mb-8 gap-3 sm:gap-4">
-              <div className="flex overflow-x-auto no-scrollbar">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("new")}
-                  className={`pb-3 px-3 sm:pb-3.5 sm:px-5 font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all duration-200 border-b-2 relative shrink-0 ${
-                    activeTab === "new"
-                      ? "border-slate-400/70 text-slate-100"
-                      : "border-transparent text-gray-400 hover:text-gray-300"
-                  }`}
-                >
-                  Create
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("join")}
-                  className={`pb-3 px-3 sm:pb-3.5 sm:px-5 font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all duration-200 border-b-2 relative shrink-0 flex items-center gap-1.5 ${
-                    activeTab === "join"
-                      ? "border-slate-400/70 text-slate-100"
-                      : "border-transparent text-gray-400 hover:text-gray-300"
-                  }`}
-                >
-                  <span>Join</span>
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold leading-none transition-colors ${
-                      activeTab === "join"
-                        ? "bg-white/20 text-white"
-                        : "bg-white/5 text-gray-400"
-                    }`}
-                  >
-                    {serverRoomsCount}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("history")}
-                  className={`pb-3 px-3 sm:pb-3.5 sm:px-5 font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all duration-200 border-b-2 relative shrink-0 ${
-                    activeTab === "history"
-                      ? "border-slate-400/70 text-slate-100"
-                      : "border-transparent text-gray-400 hover:text-gray-300"
-                  }`}
-                >
-                  History
-                </button>
-              </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { id: "new", label: "Create", icon: Plus },
+              { id: "join", label: `Join (${serverRoomsCount})`, icon: Globe },
+              { id: "history", label: "History", icon: History },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-3.5 py-2 border text-[9px] font-black uppercase tracking-[0.15em] transition-colors cursor-pointer ${
+                  activeTab === tab.id
+                    ? "border-[var(--fs-accent)] bg-[var(--fs-card-hi)] text-white"
+                    : "border-[var(--fs-line-soft)] bg-[var(--fs-card)] text-[var(--fs-dim)] hover:text-white hover:border-white/30"
+                }`}
+              >
+                <tab.icon size={12} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-              {/* User Profile and Logout */}
-              <div className="flex items-center gap-2 sm:gap-3 pb-3 px-4 sm:pb-3.5 sm:px-0 self-start sm:self-auto">
-                {user.photoURL && (
-                  <img
-                    src={user.photoURL}
-                    alt={user.displayName}
-                    className="w-6 h-6 rounded-full border border-white/20"
-                  />
-                )}
-                <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">
-                  {user.displayName}
-                </span>
-                <button
-                  onClick={logout}
-                  className="px-2.5 py-1 bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 rounded-lg text-[9px] font-black text-gray-400 hover:text-red-400 uppercase tracking-widest transition-all cursor-pointer"
-                >
-                  Logout
-                </button>
+        {/* ── Server switcher (multi-server builds only) ── */}
+        {availableServers.length > 1 && !(activeTab === "new" && playSolo) && (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 sm:px-7 py-4 border-b border-[var(--fs-line-soft)] bg-[var(--fs-deep-chip)]">
+            <div>
+              <span className="fs-label text-[var(--fs-dim)]">Auction server</span>
+              <p className="text-[9px] text-[var(--fs-ghost)] font-medium mt-0.5">
+                Lobbies and history are separate per server.
+              </p>
+            </div>
+            <ServerSwitcher
+              servers={availableServers}
+              value={selectedServer}
+              onChange={handleServerChange}
+            />
+          </div>
+        )}
+
+        {/* ══ CREATE TAB ══ */}
+        {activeTab === "new" && (
+          <form onSubmit={playSolo ? handleStartSoloAuction : handleFormSubmit}>
+            {/* Franchise grid — the design's 10-across strip */}
+            <div className="fs-team-grid">
+              {TEAMS.map((t) => {
+                const isSelected = selectedTeam === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setSelectedTeam(t.id)}
+                    aria-label={`Select ${t.name}`}
+                    aria-pressed={isSelected}
+                    className={`fs-team-choice${isSelected ? " selected" : ""}`}
+                  >
+                    {isSelected && (
+                      <span
+                        className="absolute top-1.5 right-1.5 text-[var(--fs-accent)]"
+                        aria-hidden="true"
+                      >
+                        <Check size={11} strokeWidth={3.5} />
+                      </span>
+                    )}
+                    <TeamMark team={t} />
+                    <span>{t.shortName || t.name}</span>
+                    <small>{t.botName}</small>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Mode selection */}
+            <div className="px-6 sm:px-7 py-6 border-t border-[var(--fs-line-soft)]">
+              <span className="fs-label text-[var(--fs-ghost)]">Auction format</span>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mt-3">
+                {MODES.map((mode) => {
+                  const isSelected = auctionType === mode.id;
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => setAuctionType(mode.id)}
+                      aria-pressed={isSelected}
+                      className={`text-left p-4 border transition-all cursor-pointer ${
+                        isSelected
+                          ? "border-[var(--fs-accent)] bg-[var(--fs-card-hi)] shadow-[inset_0_-3px_var(--fs-accent)]"
+                          : "border-[var(--fs-line-soft)] bg-[var(--fs-card)] hover:border-white/30 hover:-translate-y-0.5"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <mode.icon
+                          size={14}
+                          className={isSelected ? "text-[var(--fs-accent)]" : "text-[var(--fs-dim)]"}
+                        />
+                        <span
+                          className={`fs-display text-[13px] ${isSelected ? "text-white" : "text-[var(--fs-label)]"}`}
+                        >
+                          {mode.label}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-[8px] font-bold uppercase tracking-[0.15em] text-[var(--fs-faint)]">
+                        {mode.players}
+                      </p>
+                      <p className="text-[8px] font-bold uppercase tracking-[0.15em] text-[var(--fs-faint)]">
+                        {mode.purse}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* ─── CREATE TAB ─── */}
-            {activeTab === "new" && (
-              <form
-                key="create-tab"
-                onSubmit={playSolo ? handleStartSoloAuction : handleFormSubmit}
-                className="space-y-4 sm:space-y-6"
+            {/* Solo + public lobby toggles */}
+            <div className="px-6 sm:px-7 pb-6 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setPlaySolo((v) => !v)}
+                aria-pressed={playSolo}
+                className={`flex items-center justify-between gap-4 p-4 border text-left transition-colors cursor-pointer ${
+                  playSolo
+                    ? "border-[var(--fs-accent)] bg-[var(--fs-card-hi)]"
+                    : "border-[var(--fs-line-soft)] bg-[var(--fs-card)] hover:border-white/30"
+                }`}
               >
-                <div>
-                  <div className="mb-2.5 sm:mb-4 ml-1">
-                    <h2 className="text-[11px] sm:text-[13px] font-black uppercase text-gray-400 tracking-wider">
-                      Franchise
-                    </h2>
-                    <p className="text-[9px] sm:text-[11px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">
-                      {playSolo
-                        ? "Choose the team you'll manage against 9 AI franchises."
-                        : "Choose the team you'll manage."}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3">
-                    {TEAMS.map((t) => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => setSelectedTeam(t.id)}
-                        aria-label={`Select ${t.name}`}
-                        className={`relative group/team flex flex-col items-center justify-center p-1.5 sm:p-3 rounded-xl sm:rounded-2xl transition-all duration-200 cursor-pointer ${
-                          selectedTeam === t.id
-                            ? "bg-white/[0.08] border border-white/20 scale-[1.02] shadow-[0_4px_24px_rgba(0,0,0,0.5)]"
-                            : "bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-white/10"
-                        }`}
-                      >
-                        {selectedTeam === t.id && (
-                          <div className="absolute top-1.5 right-1.5 sm:top-2.5 sm:right-2.5 text-white">
-                            <Check
-                              size={10}
-                              className="sm:w-3 sm:h-3"
-                              strokeWidth={3}
-                            />
-                          </div>
-                        )}
-                        <div
-                          className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl bg-white/5 p-1 sm:p-1.5 flex items-center justify-center mb-1 sm:mb-2 transition-transform duration-200 ${selectedTeam === t.id ? "scale-105" : "group-hover/team:scale-105"}`}
-                        >
-                          <img
-                            src={t.logo}
-                            alt={`${t.name} Logo`}
-                            className="w-full h-full object-contain filter"
-                          />
-                        </div>
-                        <span
-                          className={`text-[7px] sm:text-[8px] font-black uppercase text-center tracking-tighter truncate w-full ${selectedTeam === t.id ? "text-white" : "text-gray-400"}`}
-                        >
-                          {t.shortName || t.name.split(" ")[0]}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="mb-2.5 sm:mb-4 ml-1">
-                    <h2 className="text-[11px] sm:text-[13px] font-black uppercase text-gray-400 tracking-wider">
-                      Mode
-                    </h2>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setAuctionType("mega")}
-                      className={`flex-1 p-2 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-200 text-left relative overflow-hidden group/mode cursor-pointer ${
-                        auctionType === "mega"
-                          ? "bg-white/[0.08] border border-white/20 scale-[1.02] shadow-[0_4px_24px_rgba(0,0,0,0.5)]"
-                          : "bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-white/10"
-                      }`}
-                    >
-                      {auctionType === "mega" && (
-                        <div className="absolute top-2 right-2 sm:top-3.5 sm:right-3.5 text-white">
-                          <Check
-                            size={10}
-                            className="sm:w-3 sm:h-3"
-                            strokeWidth={3}
-                          />
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1 sm:gap-2 mb-1 sm:mb-1.5">
-                        <Trophy
-                          size={12}
-                          className={
-                            auctionType === "mega"
-                              ? "text-white sm:w-3.5 sm:h-3.5"
-                              : "text-gray-400 sm:w-3.5 sm:h-3.5"
-                          }
-                        />
-                        <span
-                          className={`text-[8px] sm:text-[10px] font-black uppercase tracking-tight ${auctionType === "mega" ? "text-white" : "text-gray-400"}`}
-                        >
-                          Mega
-                        </span>
-                      </div>
-                      <div className="space-y-0.5 text-[7px] sm:text-[8px] font-bold text-gray-400 uppercase tracking-wide">
-                        <div>25 Players</div>
-                        <div>₹120 Cr Budget</div>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setAuctionType("sprint11")}
-                      className={`flex-1 p-2 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-200 text-left relative overflow-hidden group/mode cursor-pointer ${
-                        auctionType === "sprint11"
-                          ? "bg-white/[0.08] border border-white/20 scale-[1.02] shadow-[0_4px_24px_rgba(0,0,0,0.5)]"
-                          : "bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-white/10"
-                      }`}
-                    >
-                      {auctionType === "sprint11" && (
-                        <div className="absolute top-2 right-2 sm:top-3.5 sm:right-3.5 text-white">
-                          <Check
-                            size={10}
-                            className="sm:w-3 sm:h-3"
-                            strokeWidth={3}
-                          />
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1 sm:gap-2 mb-1 sm:mb-1.5">
-                        <Star
-                          size={12}
-                          className={
-                            auctionType === "sprint11"
-                              ? "text-white sm:w-3.5 sm:h-3.5"
-                              : "text-gray-400 sm:w-3.5 sm:h-3.5"
-                          }
-                        />
-                        <span
-                          className={`text-[8px] sm:text-[10px] font-black uppercase tracking-tight ${auctionType === "sprint11" ? "text-white" : "text-gray-400"}`}
-                        >
-                          Classic
-                        </span>
-                      </div>
-                      <div className="space-y-0.5 text-[7px] sm:text-[8px] font-bold text-gray-400 uppercase tracking-wide">
-                        <div>11 Players</div>
-                        <div>₹90 Cr Budget</div>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setAuctionType("sprint5")}
-                      className={`flex-1 p-2 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-200 text-left relative overflow-hidden group/mode cursor-pointer ${
-                        auctionType === "sprint5"
-                          ? "bg-white/[0.08] border border-white/20 scale-[1.02] shadow-[0_4px_24px_rgba(0,0,0,0.5)]"
-                          : "bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-white/10"
-                      }`}
-                    >
-                      {auctionType === "sprint5" && (
-                        <div className="absolute top-2 right-2 sm:top-3.5 sm:right-3.5 text-white">
-                          <Check
-                            size={10}
-                            className="sm:w-3 sm:h-3"
-                            strokeWidth={3}
-                          />
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1 sm:gap-2 mb-1 sm:mb-1.5">
-                        <Zap
-                          size={12}
-                          className={
-                            auctionType === "sprint5"
-                              ? "text-white sm:w-3.5 sm:h-3.5"
-                              : "text-gray-400 sm:w-3.5 sm:h-3.5"
-                          }
-                          fill={
-                            auctionType === "sprint5" ? "currentColor" : "none"
-                          }
-                        />
-                        <span
-                          className={`text-[8px] sm:text-[10px] font-black uppercase tracking-tight ${auctionType === "sprint5" ? "text-white" : "text-gray-400"}`}
-                        >
-                          Sprint
-                        </span>
-                      </div>
-                      <div className="space-y-0.5 text-[7px] sm:text-[8px] font-bold text-gray-400 uppercase tracking-wide">
-                        <div>5 Players</div>
-                        <div>₹60 Cr Budget</div>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setAuctionType("legends")}
-                      className={`flex-1 p-2 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-200 text-left relative overflow-hidden group/mode cursor-pointer ${
-                        auctionType === "legends"
-                          ? "bg-white/[0.08] border border-white/20 scale-[1.02] shadow-[0_4px_24px_rgba(0,0,0,0.5)]"
-                          : "bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-white/10"
-                      }`}
-                    >
-                      {auctionType === "legends" && (
-                        <div className="absolute top-2 right-2 sm:top-3.5 sm:right-3.5 text-white">
-                          <Check
-                            size={10}
-                            className="sm:w-3 sm:h-3"
-                            strokeWidth={3}
-                          />
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1 sm:gap-2 mb-1 sm:mb-1.5">
-                        <Crown
-                          size={12}
-                          className={
-                            auctionType === "legends"
-                              ? "text-white sm:w-3.5 sm:h-3.5"
-                              : "text-gray-400 sm:w-3.5 sm:h-3.5"
-                          }
-                        />
-                        <span
-                          className={`text-[8px] sm:text-[10px] font-black uppercase tracking-tight ${auctionType === "legends" ? "text-white" : "text-gray-400"}`}
-                        >
-                          Legends
-                        </span>
-                      </div>
-                      <div className="space-y-0.5 text-[7px] sm:text-[8px] font-bold text-gray-400 uppercase tracking-wide">
-                        <div>11 Players</div>
-                        <div>₹100 Cr Budget</div>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Solo vs AI bots Toggle */}
-                <div className="p-3 sm:p-4 bg-white/[0.02] border border-white/5 rounded-xl sm:rounded-2xl flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="text-[10px] sm:text-[11px] font-black uppercase text-white tracking-wider flex items-center gap-1.5">
-                      Solo vs AI Bots
-                    </h2>
-                    <p className="text-[8px] sm:text-[9px] text-gray-400 font-medium">
-                      {playSolo
-                        ? "Runs 100% on your device - no server, no room code"
-                        : "Play instantly against 9 AI franchises, no server needed"}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setPlaySolo(!playSolo)}
-                    aria-label="Toggle solo vs AI bots"
-                    className={`w-10 h-5 sm:w-12 sm:h-6 rounded-full transition-colors p-1 flex items-center cursor-pointer shrink-0 ${
-                      playSolo
-                        ? "bg-emerald-400 justify-end"
-                        : "bg-white/10 justify-start"
-                    }`}
-                  >
-                    <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-slate-900 shadow-md" />
-                  </button>
-                </div>
-
-                {/* Public Lobby Directory Toggle (Cloud Rooms only) */}
-                {!playSolo && (
-                  <div className="p-3 sm:p-4 bg-white/[0.02] border border-white/5 rounded-xl sm:rounded-2xl flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <h2 className="text-[10px] sm:text-[11px] font-black uppercase text-white tracking-wider flex items-center gap-1.5">
-                        <Globe size={12} className="text-slate-400" />
-                        Public Lobby
-                      </h2>
-                      <p className="text-[8px] sm:text-[9px] text-gray-400 font-medium">
-                        {isPublicRoom
-                          ? "Visible in Public Lobbies so other players can discover and join"
-                          : "Private room - only players with your room code can join"}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsPublicRoom(!isPublicRoom)}
-                      aria-label="Toggle public lobby"
-                      className={`w-10 h-5 sm:w-12 sm:h-6 rounded-full transition-colors p-1 flex items-center cursor-pointer shrink-0 ${
-                        isPublicRoom
-                          ? "bg-emerald-400 justify-end"
-                          : "bg-white/10 justify-start"
-                      }`}
-                    >
-                      <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-slate-900 shadow-md" />
-                    </button>
-                  </div>
-                )}
-
-                {playSolo && (
-                  <div className="p-3 sm:p-4 bg-emerald-500/[0.04] border border-emerald-500/20 rounded-xl sm:rounded-2xl flex items-start gap-3">
-                   
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-[10px] sm:text-[11px] font-black uppercase text-emerald-400 tracking-wider">
-                          Zero RTDB Load
-                        </h3>
-                      </div>
-                      <p className="text-[8px] sm:text-[9px] text-gray-400 font-medium mt-0.5 leading-relaxed">
-                        10s bidding timer with pause/resume and fast-forward. Runs 100% on your device and saves locally in browser storage.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="pt-1 sm:pt-2">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || (cooldownRemaining > 0 && !playSolo)}
-                    className="w-full h-10 sm:h-12 relative overflow-hidden group/submit rounded-xl bg-white hover:bg-slate-200 text-black shadow-[0_10px_30px_rgba(255,255,255,0.08)] disabled:opacity-50 cursor-pointer transition-all active:scale-[0.98]"
-                  >
-                    <div className="relative flex items-center justify-center gap-2 font-black uppercase tracking-[0.16em] sm:tracking-[0.2em] text-[10px] sm:text-xs">
-                      {isSubmitting ? (
-                        <Loader2 size={18} className="animate-spin" />
-                      ) : cooldownRemaining > 0 && !playSolo ? (
-                        <span>Wait {cooldownRemaining}s to Create</span>
-                      ) : (
-                        <>
-                          <span>{playSolo ? "Start Solo Auction" : "Start Auction"}</span>
-                          <ChevronRight
-                            size={16}
-                            className="group-hover/submit:translate-x-1 transition-transform"
-                          />
-                        </>
-                      )}
-                    </div>
-                  </button>
-                
-                </div>
-              </form>
-            )}
-
-            {/* ─── JOIN TAB ─── */}
-            {activeTab === "join" && (
-              <div key="join-tab" className="space-y-4 sm:space-y-6">
-                <form
-                  onSubmit={handleFormSubmit}
-                  className="space-y-3 sm:space-y-4"
+                <span className="min-w-0">
+                  <span className="fs-display text-[12px] flex items-center gap-2">
+                    <Bot size={14} className={playSolo ? "text-[var(--fs-accent)]" : "text-[var(--fs-dim)]"} />
+                    Solo vs AI Bots
+                  </span>
+                  <span className="block mt-1 text-[8.5px] font-medium text-[var(--fs-faint)] leading-relaxed">
+                    {playSolo
+                      ? "Runs 100% on your device — no server, no room code"
+                      : "Play instantly against 9 AI franchises, no server needed"}
+                  </span>
+                </span>
+                <span
+                  className={`w-11 h-6 rounded-full p-1 flex items-center shrink-0 transition-colors ${
+                    playSolo ? "bg-[var(--fs-accent)] justify-end" : "bg-[#1a3046] justify-start"
+                  }`}
+                  aria-hidden="true"
                 >
-                  <div className="relative group">
-                    <div className="flex items-center justify-between mb-1.5 sm:mb-2 ml-1">
-                      <label className="block text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-[0.18em] sm:tracking-[0.2em]">
-                        Room Code
-                      </label>
-                      <span className="text-[8px] font-mono text-gray-500 uppercase">
-                        Cloud Room
-                      </span>
-                    </div>
-                    <input
-                      type="text"
-                      value={roomCode}
-                      onChange={(e) => setRoomCode(e.target.value)}
-                      className="w-full bg-[#111] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3.5 focus:outline-none focus:border-white/30 transition-all text-white font-black uppercase tracking-[0.25em] sm:tracking-[0.4em] text-center text-sm sm:text-base placeholder:tracking-normal placeholder:text-[10px] sm:placeholder:text-xs placeholder:text-gray-500"
-                      placeholder="e.g. AB12CD"
-                    />
-                  </div>
+                  <span className="w-4 h-4 rounded-full bg-[var(--fs-deep)] shadow-md" />
+                </span>
+              </button>
 
-                  {roomCode.trim() ? (
-                    <div className="p-2 sm:p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 flex flex-wrap items-center justify-between gap-1.5 text-[8.5px] sm:text-[10px] font-mono text-blue-400">
-                      <div className="flex items-center gap-1.5 font-bold min-w-0">
-                        <Globe size={12} className="shrink-0" />
-                        <span className="truncate">Cloud Room Format</span>
-                      </div>
-                      <span className="text-gray-400 font-bold uppercase shrink-0 text-[7.5px] sm:text-[9px]">
-                        Firebase RTDB Server
-                      </span>
-                    </div>
-                  ) : null}
-
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || !roomCode.trim()}
-                    className="w-full h-10 sm:h-12 relative overflow-hidden group/submit rounded-xl bg-white hover:bg-slate-200 text-black shadow-[0_10px_30px_rgba(255,255,255,0.08)] disabled:opacity-50 cursor-pointer"
+              {!playSolo && (
+                <button
+                  type="button"
+                  onClick={() => setIsPublicRoom((v) => !v)}
+                  aria-pressed={isPublicRoom}
+                  className={`flex items-center justify-between gap-4 p-4 border text-left transition-colors cursor-pointer ${
+                    isPublicRoom
+                      ? "border-[var(--fs-accent)] bg-[var(--fs-card-hi)]"
+                      : "border-[var(--fs-line-soft)] bg-[var(--fs-card)] hover:border-white/30"
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="fs-display text-[12px] flex items-center gap-2">
+                      <Globe size={14} className={isPublicRoom ? "text-[var(--fs-accent)]" : "text-[var(--fs-dim)]"} />
+                      Public Lobby
+                    </span>
+                    <span className="block mt-1 text-[8.5px] font-medium text-[var(--fs-faint)] leading-relaxed">
+                      {isPublicRoom
+                        ? "Listed publicly so other players can discover and join"
+                        : "Private room — only players with your room code can join"}
+                    </span>
+                  </span>
+                  <span
+                    className={`w-11 h-6 rounded-full p-1 flex items-center shrink-0 transition-colors ${
+                      isPublicRoom ? "bg-[var(--fs-accent)] justify-end" : "bg-[#1a3046] justify-start"
+                    }`}
+                    aria-hidden="true"
                   >
-                    <div className="relative flex items-center justify-center gap-2 sm:gap-3 font-black uppercase tracking-[0.16em] sm:tracking-[0.2em] text-[10px] sm:text-xs">
-                      {isSubmitting ? (
-                        <Loader2 size={18} className="animate-spin" />
-                      ) : (
-                        <>
-                          <span>Join by Code</span>
-                          <ChevronRight
-                            size={16}
-                            className="group-hover/submit:translate-x-1 transition-transform"
-                          />
-                        </>
-                      )}
-                    </div>
-                  </button>
-                </form>
-
-                {/* Public Lobbies Directory Section */}
-                <div className="relative py-1 sm:py-2 flex items-center justify-center">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-white/5" />
-                  </div>
-                  <span className="relative bg-[#0c0d10] px-3 sm:px-4 text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                    Or join a public lobby ({serverRoomsCount})
+                    <span className="w-4 h-4 rounded-full bg-[var(--fs-deep)] shadow-md" />
                   </span>
-                </div>
+                </button>
+              )}
+            </div>
 
-                <div className="space-y-2.5 sm:space-y-3 pt-0 sm:pt-1">
-                  <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center justify-between">
-                    <div className="relative w-full sm:flex-1 flex gap-2">
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search room code or manager..."
-                        className="w-full bg-white/[0.03] border border-white/10 focus:border-white/30 rounded-xl px-3 sm:px-3.5 py-1.5 sm:py-2 text-[10px] sm:text-xs text-white placeholder:text-gray-400 focus:outline-none transition-all font-medium"
-                      />
-                      <button
-                        type="button"
-                        onClick={fetchPublicRoomsList}
-                        disabled={publicRoomsLoading}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-gray-300 hover:text-white hover:bg-white/10 transition-all disabled:opacity-40 cursor-pointer shrink-0"
-                        title="Refresh Lobbies"
-                      >
-                        <RefreshCw
-                          size={10}
-                          className={publicRoomsLoading ? "animate-spin text-emerald-400" : ""}
-                        />
-                        Refresh
-                      </button>
-                    </div>
-
-                    <div className="flex items-center gap-1 w-full sm:w-auto overflow-x-auto custom-scrollbar no-scrollbar py-0.5">
-                      {[
-                        { id: "all", label: "All" },
-                        { id: "mega", label: "Mega" },
-                        { id: "sprint11", label: "11-Classic" },
-                        { id: "sprint5", label: "5-Sprint" },
-                        { id: "legends", label: "Legends" },
-                      ].map((mode) => (
-                        <button
-                          key={mode.id}
-                          type="button"
-                          onClick={() => setFilterMode(mode.id)}
-                          className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[8px] sm:text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
-                            filterMode === mode.id
-                              ? "bg-white/10 text-white border border-white/20"
-                              : "bg-transparent text-gray-400 hover:text-gray-300 border border-transparent"
-                          }`}
-                        >
-                          {mode.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {publicRoomsLoading ? (
-                    <div className="flex flex-col items-center justify-center h-[280px] sm:h-[340px] text-gray-400">
-                      <Loader2
-                        size={20}
-                        className="animate-spin mb-2 text-slate-400"
-                      />
-                      <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                        Scanning active rooms...
-                      </p>
-                    </div>
-                  ) : filteredPublicRooms.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-[280px] sm:h-[340px] text-center bg-white/[0.01] border border-white/5 rounded-xl sm:rounded-2xl p-4">
-                      <p className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">
-                        No Active Public Lobbies
-                      </p>
-                      <p className="text-[9px] sm:text-[10px] text-gray-400 font-medium max-w-xs">
-                        No open public rooms on {getServerMeta(selectedServer).label} right now. Create one to get started!
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="h-[280px] sm:h-[340px] overflow-y-auto custom-scrollbar pr-1 space-y-1.5 sm:space-y-2">
-                      {filteredPublicRooms.map((room) => (
-                        <div
-                          key={room.id}
-                          className="p-2 sm:p-3 bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-white/10 rounded-xl transition-all duration-200 flex flex-row items-center justify-between gap-2 sm:gap-3 group"
-                        >
-                          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <h2 className="text-[10px] sm:text-xs font-bold text-white tracking-tight truncate max-w-[96px] xs:max-w-[160px] sm:max-w-none">
-                                  {room.hostName}'s Room -
-                                </h2>
-                                <span className="text-white font-mono font-bold text-[9px] sm:text-xs tracking-wider shrink-0">
-                                  {room.id}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-[10px] text-gray-400 font-medium mt-0.5 truncate">
-                                <span className="px-1.5 py-0.5 rounded font-black text-[7px] sm:text-[8px] uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
-                                  WAITING
-                                </span>
-
-                                <span className="shrink-0">•</span>
-                                <span className="text-gray-400 truncate">
-                                  {room.type === "legends"
-                                    ? "Legends"
-                                    : room.type === "sprint5"
-                                    ? "5-Sprint"
-                                    : room.type === "sprint11"
-                                      ? "11-Classic"
-                                      : "Mega"}
-                                </span>
-                                <span className="shrink-0">•</span>
-                                <span className="text-gray-500 truncate">
-                                  {getServerMeta(room.server).shortLabel}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            disabled={isSubmitting}
-                            onClick={() => handleJoinPublicRoom(room)}
-                            className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-white/10 hover:bg-white/20 border border-white/10 text-white font-black text-[8px] sm:text-[10px] uppercase tracking-wider rounded-lg transition-all active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer shadow-md disabled:opacity-50"
-                          >
-                            <span>Join</span>
-                            <ChevronRight
-                              size={12}
-                              className="group-hover:translate-x-0.5 transition-transform"
-                            />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+            {/* Hand-off bar — the design's selection-action row */}
+            <div className="fs-selection-action">
+              <div className="fs-picked-team">
+                <TeamMark team={pickedTeam} />
+                <span>
+                  Your franchise
+                  <b>{pickedTeam?.name}</b>
+                </span>
+                <span className="hidden sm:flex items-center gap-1.5 ml-3 pl-3 border-l border-[var(--fs-line-soft)] text-[var(--fs-faint)] text-[9px] font-bold uppercase tracking-wider">
+                  <Swords size={11} />
+                  {activeMode.label}
+                </span>
               </div>
-            )}
 
-            {/* ─── HISTORY TAB ─── */}
-            {activeTab === "history" && (
-              <div key="history-tab" className="space-y-3 sm:space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] sm:text-[10px] font-black text-gray-500 uppercase tracking-widest">
-                    Auction History
-                  </span>
+              <button
+                type="submit"
+                disabled={isSubmitting || (cooldownRemaining > 0 && !playSolo)}
+                className="fs-primary-btn"
+              >
+                {isSubmitting ? (
+                  <Loader2 size={17} className="animate-spin" />
+                ) : cooldownRemaining > 0 && !playSolo ? (
+                  <span className="text-[11px]">Wait {cooldownRemaining}s</span>
+                ) : (
+                  <>
+                    <span className="text-[11px] tracking-[1px] font-extrabold">
+                      {playSolo ? "Start solo auction" : "Start auction"}
+                    </span>
+                    <span aria-hidden="true">→</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* ══ JOIN TAB ══ */}
+        {activeTab === "join" && (
+          <div>
+            <form onSubmit={handleFormSubmit} className="px-6 sm:px-7 py-6 border-b border-[var(--fs-line-soft)]">
+              <span className="fs-label text-[var(--fs-ghost)]">Room code</span>
+              <div className="flex flex-col sm:flex-row gap-2.5 mt-3">
+                <input
+                  type="text"
+                  value={roomCode}
+                  onChange={(e) => setRoomCode(e.target.value)}
+                  placeholder={displayRoomCode}
+                  className="flex-1 bg-[var(--fs-deep-chip)] border border-[var(--fs-line)] px-4 py-4 text-white font-extrabold text-center tracking-[0.4em] text-base placeholder:tracking-[0.25em] placeholder:text-[var(--fs-ghost)] placeholder:font-bold focus:outline-none focus:border-[var(--fs-accent)] transition-colors uppercase"
+                  aria-label="Room code"
+                />
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !roomCode.trim()}
+                  className="fs-primary-btn"
+                  style={{ minWidth: 200 }}
+                >
+                  {isSubmitting ? (
+                    <Loader2 size={17} className="animate-spin" />
+                  ) : (
+                    <>
+                      <span className="text-[11px] font-extrabold">Join by code</span>
+                      <span aria-hidden="true">→</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="mt-3 text-[8.5px] font-bold uppercase tracking-[0.15em] text-[var(--fs-ghost)]">
+                Cloud room · Firebase RTDB · {getServerMeta(selectedServer).label}
+              </p>
+            </form>
+
+            {/* Public lobby directory */}
+            <div className="px-6 sm:px-7 py-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <span className="fs-label text-[var(--fs-ghost)]">
+                  Public lobbies ({serverRoomsCount})
+                </span>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search room code or manager"
+                    className="w-full sm:w-56 bg-[var(--fs-deep-chip)] border border-[var(--fs-line-soft)] px-3 py-2 text-[11px] text-white placeholder:text-[var(--fs-ghost)] focus:outline-none focus:border-[var(--fs-accent)] transition-colors"
+                  />
                   <button
                     type="button"
-                    onClick={fetchHistory}
-                    disabled={historyLoading}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-gray-300 hover:text-white hover:bg-white/10 transition-all disabled:opacity-40 cursor-pointer"
+                    onClick={fetchPublicRoomsList}
+                    disabled={publicRoomsLoading}
+                    className="flex items-center gap-1.5 px-3 py-2 border border-[var(--fs-line-soft)] bg-[var(--fs-card)] text-[8.5px] font-black uppercase tracking-widest text-[var(--fs-label)] hover:text-white hover:border-white/30 transition-colors disabled:opacity-40 cursor-pointer"
+                    title="Refresh lobbies"
                   >
-                    <RefreshCw
-                      size={10}
-                      className={historyLoading ? "animate-spin" : ""}
-                    />
+                    <RefreshCw size={11} className={publicRoomsLoading ? "animate-spin text-[var(--fs-accent)]" : ""} />
                     Refresh
                   </button>
                 </div>
-                {historyData.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setHistoryFilter("all")}
-                      className={`px-2.5 py-1 rounded-md text-[8px] sm:text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
-                        historyFilter === "all"
-                          ? "bg-blue-600 text-white shadow-sm"
-                          : "bg-white/5 text-gray-400 hover:text-white hover:bg-white/10"
-                      }`}
-                    >
-                      All ({historyData.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setHistoryFilter(historyFilter === "cloud" ? "all" : "cloud")}
-                      className={`px-2.5 py-1 rounded-md text-[8px] sm:text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
-                        historyFilter === "cloud"
-                          ? "bg-blue-600 text-white shadow-sm"
-                          : "bg-white/5 text-gray-400 hover:text-white hover:bg-white/10"
-                      }`}
-                    >
-                      <Cloud size={11} />
-                      Cloud ({cloudSessionsCount})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setHistoryFilter(historyFilter === "local" ? "all" : "local")}
-                      className={`px-2.5 py-1 rounded-md text-[8px] sm:text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
-                        historyFilter === "local"
-                          ? "bg-blue-600 text-white shadow-sm"
-                          : "bg-white/5 text-gray-400 hover:text-white hover:bg-white/10"
-                      }`}
-                    >
-                      <Wifi size={11} className="rotate-90" />
-                      Local ({localSessionsCount})
-                    </button>
+              </div>
 
-                    {availableServers.map((serverKey) => {
-                      const count = historyData.filter(
-                        (s) => !isSessionLocal(s) && normalizeServer(s.server) === serverKey,
-                      ).length;
-                      if (count === 0) return null;
-                      return (
-                        <button
-                          key={serverKey}
-                          type="button"
-                          onClick={() => setHistoryFilter(historyFilter === serverKey ? "cloud" : serverKey)}
-                          className={`px-2 py-1 rounded-md text-[8px] sm:text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
-                            historyFilter === serverKey
-                              ? "bg-indigo-600 text-white shadow-sm"
-                              : "bg-white/[0.03] text-gray-400 hover:text-white hover:bg-white/10 border border-white/5"
-                          }`}
-                        >
-                          {getServerMeta(serverKey).label} ({count})
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                {historyError && filteredHistory.length > 0 && (
-                  <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20">
-                    <span className="text-[9px] font-bold text-red-400">
-                      {historyError}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={fetchHistory}
-                      className="text-[8px] font-black uppercase tracking-widest text-red-300 hover:text-white cursor-pointer"
+              <div className="flex flex-wrap items-center gap-1.5 mb-4">
+                {[
+                  { id: "all", label: "All" },
+                  { id: "mega", label: "Mega" },
+                  { id: "sprint11", label: "11-Classic" },
+                  { id: "sprint5", label: "5-Sprint" },
+                  { id: "legends", label: "Legends" },
+                ].map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => setFilterMode(mode.id)}
+                    className={`px-3 py-1.5 border text-[8.5px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                      filterMode === mode.id
+                        ? "border-[var(--fs-accent)] bg-[var(--fs-card-hi)] text-white"
+                        : "border-[var(--fs-line-soft)] bg-[var(--fs-card)] text-[var(--fs-dim)] hover:text-white"
+                    }`}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+
+              {publicRoomsLoading ? (
+                <div className="flex flex-col items-center justify-center h-[280px] text-[var(--fs-dim)]">
+                  <Loader2 size={20} className="animate-spin mb-3 text-[var(--fs-accent)]" />
+                  <p className="text-[9px] font-bold uppercase tracking-widest">
+                    Scanning active rooms…
+                  </p>
+                </div>
+              ) : filteredPublicRooms.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-[280px] text-center border border-[var(--fs-line-soft)] bg-[var(--fs-card)] p-6">
+                  <p className="fs-display text-[15px] mb-1.5">No active public lobbies</p>
+                  <p className="text-[9.5px] text-[var(--fs-ghost)] font-medium max-w-xs leading-relaxed">
+                    No open public rooms on {getServerMeta(selectedServer).label} right now.
+                    Create one to get started.
+                  </p>
+                </div>
+              ) : (
+                <div className="h-[340px] overflow-y-auto space-y-2 pr-1">
+                  {filteredPublicRooms.map((room) => (
+                    <div
+                      key={room.id}
+                      className="flex flex-wrap items-center justify-between gap-3 p-3.5 border border-[var(--fs-line-soft)] bg-[var(--fs-card)] hover:border-white/30 hover:bg-[var(--fs-card-hi)] transition-colors group"
                     >
-                      Retry
-                    </button>
-                  </div>
-                )}
-                {historyLoading ? (
-                  <div className="flex flex-col items-center justify-center py-10 sm:py-16">
-                    <Loader2
-                      size={26}
-                      className="text-blue-500 animate-spin mb-3 sm:mb-4 sm:w-8 sm:h-8"
-                    />
-                    <p className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mt-2 sm:mt-4">
-                      Syncing Database...
-                    </p>
-                  </div>
-                ) : historyError && filteredHistory.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10 sm:py-16 text-center">
-                    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-red-500/10 border border-red-500/20 rounded-xl sm:rounded-2xl flex items-center justify-center mb-3 sm:mb-4">
-                      <RefreshCw
-                        size={22}
-                        className="text-red-400 sm:w-7 sm:h-7"
-                      />
-                    </div>
-                    <h2 className="text-xs sm:text-sm font-black text-red-400 uppercase tracking-widest mb-1">
-                      History Unavailable
-                    </h2>
-                    <p className="text-[9px] sm:text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-4">
-                      {historyError}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={fetchHistory}
-                      className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-[9px] font-black uppercase tracking-widest text-white hover:bg-white/10 transition-all cursor-pointer"
-                    >
-                      Try Again
-                    </button>
-                  </div>
-                ) : filteredHistory.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10 sm:py-16 text-center">
-                    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white/5 border border-dashed border-white/10 rounded-xl sm:rounded-2xl flex items-center justify-center mb-3 sm:mb-4">
-                      <History
-                        size={22}
-                        className="text-gray-400 sm:w-7 sm:h-7"
-                      />
-                    </div>
-                    <h2 className="text-xs sm:text-sm font-black text-gray-400 uppercase tracking-widest mb-1">
-                      {historyData.length > 0 ? "No Matching Auctions" : "No Auctions Yet"}
-                    </h2>
-                    <p className="text-[9px] sm:text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-3">
-                      {historyData.length > 0
-                        ? "No auctions found for this filter tab."
-                        : "Create or join a room to start bidding!"}
-                    </p>
-                    {historyData.length > 0 && historyFilter !== "all" && (
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[12px] font-bold text-white truncate">
+                            {room.hostName}&rsquo;s Room
+                          </span>
+                          <span className="fs-display text-[13px] text-[var(--fs-accent)] tracking-wider">
+                            {room.id}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          <span className="px-1.5 py-0.5 text-[7.5px] font-black uppercase tracking-wider bg-[#1b3a22] text-[#b9dba5]">
+                            Waiting
+                          </span>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--fs-faint)]">
+                            {room.type === "legends"
+                              ? "Legends"
+                              : room.type === "sprint5"
+                                ? "5-Sprint"
+                                : room.type === "sprint11"
+                                  ? "11-Classic"
+                                  : "Mega"}
+                          </span>
+                          <span className="text-[9px] uppercase tracking-wider text-[var(--fs-ghost)]">
+                            {getServerMeta(room.server).shortLabel}
+                          </span>
+                        </div>
+                      </div>
+
                       <button
                         type="button"
-                        onClick={() => setHistoryFilter("all")}
-                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-black text-[9px] uppercase tracking-wider transition-all cursor-pointer shadow-md"
+                        disabled={isSubmitting}
+                        onClick={() => handleJoinPublicRoom(room)}
+                        className="flex items-center gap-1.5 px-4 py-2 border border-[var(--fs-line)] bg-[var(--fs-deep-chip)] text-white font-black text-[9.5px] uppercase tracking-wider hover:border-[var(--fs-accent)] hover:text-[var(--fs-accent)] transition-colors active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
                       >
-                        Show All Auctions ({historyData.length})
+                        Join
+                        <ChevronRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
                       </button>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    {/* Session List */}
-                    <div className="space-y-2 sm:space-y-3 max-h-[330px] sm:max-h-[400px] overflow-y-auto custom-scrollbar pr-0.5 sm:pr-1">
-                      {filteredHistory.map((session) => {
-                        const teamMeta = TEAMS.find(
-                          (t) => t.id === session.teamId,
-                        );
-                        const isExpanded = expandedSession === session.id;
-                        const isCompleted = session.status === "completed";
-                        const isActive = session.status === "active";
-                        const overseasCount = countOverseas(
-                          session.squad,
-                          IPL_PLAYERS,
-                        );
-
-                        return (
-                          <div key={session.id} className="space-y-1">
-                            {/* Outer row: div acts as the expand toggle — avoids nested <button> HTML violation */}
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onClick={() =>
-                                setExpandedSession(
-                                  isExpanded ? null : session.id,
-                                )
-                              }
-                              onKeyDown={(e) =>
-                                (e.key === "Enter" || e.key === " ") &&
-                                setExpandedSession(
-                                  isExpanded ? null : session.id,
-                                )
-                              }
-                              className={`w-full text-left p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border transition-all flex items-center justify-between group cursor-pointer ${
-                                isExpanded
-                                  ? "bg-white/10 border-white/20 shadow-lg"
-                                  : "bg-white/[0.03] border-white/5 hover:bg-white/5"
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                                <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl bg-white/5 border border-white/10 p-1 sm:p-1.5 flex items-center justify-center shrink-0">
-                                  <img
-                                    src={teamMeta?.logo}
-                                    alt={`${teamMeta?.name || "Team"} Logo`}
-                                    className="w-full h-full object-contain"
-                                  />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <h3 className="text-[11px] sm:text-sm font-black uppercase tracking-tight truncate">
-                                    {teamMeta?.name || session.teamName}
-                                  </h3>
-                                  <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 mt-0.5">
-                                    <span className="text-[7px] sm:text-[8px] font-bold text-gray-400 uppercase tracking-wider shrink-0">
-                                      Room: {session.roomId}
-                                    </span>
-                                    <span className="text-[7px] sm:text-[8px] font-black uppercase px-1.5 py-0.5 rounded shrink-0 bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                                      {getServerMeta(session.server).label}
-                                    </span>
-                                    <span className="text-[7px] sm:text-[8px] font-black uppercase px-1.5 py-0.5 rounded shrink-0 bg-gray-500/10 text-gray-400">
-                                      {session.mode}
-                                    </span>
-                                    <span
-                                      className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded shrink-0 ${
-                                        session.status === "completed"
-                                          ? "bg-green-500/10 text-green-500"
-                                          : session.status === "active"
-                                            ? "bg-emerald-500/10 text-emerald-400"
-                                            : session.status === "paused"
-                                              ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                              : "bg-gray-500/10 text-gray-400"
-                                      }`}
-                                    >
-                                      {session.status}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1.5 sm:gap-4 shrink-0 ml-1.5 sm:ml-2">
-                                <div className="text-right">
-                                  <span className="text-[9px] sm:text-xs font-black italic text-yellow-500 block">
-                                    {session.spent === null
-                                      ? "—"
-                                      : `₹${formatCrores(session.spent, 1)} Cr`}
-                                  </span>
-                                  <span className="block text-[7px] sm:text-[8px] font-bold text-gray-400">
-                                    {session.squad.length} players
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation(); // Prevent accordion toggle
-                                    setSessionToDelete(session);
-                                  }}
-                                  title="Delete History"
-                                  aria-label="Delete history"
-                                  className="p-1 sm:p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-                                >
-                                  <Trash2
-                                    size={12}
-                                    className="sm:w-[13px] sm:h-[13px]"
-                                  />
-                                </button>
-                                <ChevronDown
-                                  size={12}
-                                  className={`text-gray-400 transition-transform duration-300 sm:w-3.5 sm:h-3.5 ${isExpanded ? "rotate-180" : ""}`}
-                                />
-                              </div>
-                            </div>
-
-                            {/* Expanded Squad */}
-                            {isExpanded && (
-                              <div className="overflow-hidden">
-                                <div className="bg-[#111] border border-white/5 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 space-y-2 sm:space-y-3 mt-1">
-                                  {isCompleted ? (
-                                    <>
-                                      {/* Quick Stats */}
-                                      <div className="flex flex-wrap items-center justify-between gap-1 sm:gap-3 text-[7px] sm:text-[9px] font-black uppercase tracking-tight px-1.5 py-1 bg-white/[0.02] rounded-lg sm:rounded-xl border border-white/5">
-                                        <span className="text-gray-400">
-                                          Budget Left:{" "}
-                                          <span className="text-green-400">
-                                            {session.budgetRemaining == null
-                                              ? "—"
-                                              : `₹${formatCrores(session.budgetRemaining)} Cr`}
-                                          </span>
-                                        </span>
-                                        <span className="text-gray-400">
-                                          Overseas:{" "}
-                                          <span className="text-purple-400">
-                                            {overseasCount}/{session.overseasLimit}
-                                          </span>
-                                        </span>
-                                        <span className="text-gray-400">
-                                          Squad:{" "}
-                                          <span className="text-white">
-                                            {session.squad.length}/{session.squadLimit}
-                                          </span>
-                                        </span>
-                                      </div>
-
-                                      {/* Players by Role */}
-                                      {[
-                                        "Batsman",
-                                        "Wicket-Keeper",
-                                        "All-Rounder",
-                                        "Bowler",
-                                      ].map((role) => {
-                                        const rolePlayers = session.squad.filter(
-                                          (p) => p?.role === role,
-                                        );
-                                        if (rolePlayers.length === 0) return null;
-
-                                        return (
-                                          <div key={role}>
-                                            <div className="flex items-center gap-2 px-1 mb-1">
-                                              <span className="text-[7px] sm:text-[8px] font-black text-blue-500 uppercase tracking-widest">
-                                                {role}s
-                                              </span>
-                                              <div className="flex-1 h-px bg-white/5" />
-                                              <span className="text-[8px] font-black text-gray-400">
-                                                {rolePlayers.length}
-                                              </span>
-                                            </div>
-                                            <div className="space-y-1">
-                                              {rolePlayers.map((p, idx) => (
-                                                <div
-                                                  key={idx}
-                                                  className="flex items-center justify-between bg-white/[0.03] hover:bg-white/5 transition-all p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl"
-                                                >
-                                                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 pr-2">
-                                                    <img
-                                                      src={p?.image}
-                                                      alt={p?.name}
-                                                      className="w-5 h-5 sm:w-7 sm:h-7 object-contain rounded-md bg-white/5 shrink-0"
-                                                    />
-                                                    <div className="min-w-0 flex-1">
-                                                      <h4 className="text-[9px] sm:text-[11px] font-black leading-tight truncate">
-                                                        {p?.name}
-                                                      </h4>
-                                                      <div className="flex items-center gap-1.5">
-                                                        <span className="text-[7px] font-bold text-gray-400 uppercase">
-                                                          {p?.type}
-                                                        </span>
-                                                        {isOverseasPlayer(p) && (
-                                                          <Wifi
-                                                            size={8}
-                                                            className="text-purple-400 rotate-90 shrink-0"
-                                                          />
-                                                        )}
-                                                      </div>
-                                                    </div>
-                                                  </div>
-                                                  <span className="text-[8px] sm:text-[10px] font-black italic text-yellow-500 shrink-0">
-                                                    {p?.bid == null
-                                                      ? "—"
-                                                      : `₹${formatCrores(p.bid)} Cr`}
-                                                  </span>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-
-                                      {session.squad.length === 0 && (
-                                        <p className="text-center text-[9px] sm:text-[10px] text-gray-400 font-bold py-3 sm:py-4 uppercase">
-                                          No players acquired in this session
-                                        </p>
-                                      )}
-
-                                      <button
-                                        onClick={() =>
-                                          navigate(
-                                            withServerParam(
-                                              `/summary/${session.roomId}`,
-                                              session.server,
-                                            ),
-                                          )
-                                        }
-                                        className="w-full mt-1.5 sm:mt-2 py-2 sm:py-3 bg-blue-600/10 border border-blue-500/20 rounded-xl text-blue-500 text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-blue-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
-                                      >
-                                        <Trophy size={12} /> View Full Summary
-                                      </button>
-                                    </>
-                                  ) : isActive ? (
-                                    <>
-                                      {/* Live auction info */}
-                                      <div className="flex items-start gap-2.5 px-2.5 py-2.5 bg-yellow-500/[0.06] border border-yellow-500/15 rounded-xl">
-                                        <div className="min-w-0">
-                                          <p className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-yellow-400">
-                                            Auction In Progress
-                                          </p>
-                                          <p className="text-[8px] sm:text-[9px] text-gray-500 font-medium mt-0.5">
-                                            {session.isLocal
-                                              ? "Saved on this device — resume right where you left off."
-                                              : "Bidding is live right now — jump back in to keep building your squad."}
-                                          </p>
-                                        </div>
-                                      </div>
-
-                                      <button
-                                        onClick={() =>
-                                          navigate(
-                                            withServerParam(
-                                              session.isLocal
-                                                ? `/auction/${session.roomId}`
-                                                : `/lobby/${session.roomId}`,
-                                              session.server,
-                                            ),
-                                          )
-                                        }
-                                        className="w-full mt-1.5 sm:mt-2 py-2 sm:py-3 bg-white/5 border border-white/10 rounded-xl text-slate-200 text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all cursor-pointer flex items-center justify-center gap-2"
-                                      >
-                                        <Zap size={12} /> Resume Auction
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      {/* Waiting room info */}
-                                      <div className="flex items-start gap-2.5 px-2.5 py-2.5 bg-white/[0.02] border border-white/10 rounded-xl">
-                                        <Clock
-                                          size={14}
-                                          className="text-gray-400 mt-0.5 shrink-0"
-                                        />
-                                        <div className="min-w-0">
-                                          <p className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-gray-300">
-                                            Auction Not Started
-                                          </p>
-                                          <p className="text-[8px] sm:text-[9px] text-gray-500 font-medium mt-0.5">
-                                            This room is still waiting in the lobby for the host to start bidding.
-                                          </p>
-                                        </div>
-                                      </div>
-
-                                      <button
-                                        onClick={() =>
-                                          navigate(
-                                            withServerParam(
-                                              session.isLocal
-                                                ? `/auction/${session.roomId}`
-                                                : `/lobby/${session.roomId}`,
-                                              session.server,
-                                            ),
-                                          )
-                                        }
-                                        className="w-full mt-1.5 sm:mt-2 py-2 sm:py-3 bg-white/5 border border-white/10 rounded-xl text-slate-200 text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all cursor-pointer flex items-center justify-center gap-2"
-                                      >
-                                        <Zap size={12} /> Resume / Join Auction
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
                     </div>
-                  </>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ══ HISTORY TAB ══ */}
+        {activeTab === "history" && (
+          <div className="px-6 sm:px-7 py-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <span className="fs-label text-[var(--fs-ghost)]">Auction history</span>
+              <button
+                type="button"
+                onClick={fetchHistory}
+                disabled={historyLoading}
+                className="flex items-center gap-1.5 px-3 py-2 border border-[var(--fs-line-soft)] bg-[var(--fs-card)] text-[8.5px] font-black uppercase tracking-widest text-[var(--fs-label)] hover:text-white hover:border-white/30 transition-colors disabled:opacity-40 cursor-pointer"
+              >
+                <RefreshCw size={11} className={historyLoading ? "animate-spin" : ""} />
+                Refresh
+              </button>
+            </div>
+
+            {historyData.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilter("all")}
+                  className={`px-2.5 py-1.5 border text-[8.5px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
+                    historyFilter === "all"
+                      ? "border-[var(--fs-accent)] bg-[var(--fs-card-hi)] text-white"
+                      : "border-[var(--fs-line-soft)] bg-[var(--fs-card)] text-[var(--fs-dim)] hover:text-white"
+                  }`}
+                >
+                  All ({historyData.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilter(historyFilter === "cloud" ? "all" : "cloud")}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 border text-[8.5px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
+                    historyFilter === "cloud"
+                      ? "border-[var(--fs-accent)] bg-[var(--fs-card-hi)] text-white"
+                      : "border-[var(--fs-line-soft)] bg-[var(--fs-card)] text-[var(--fs-dim)] hover:text-white"
+                  }`}
+                >
+                  <Cloud size={11} />
+                  Cloud ({cloudSessionsCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilter(historyFilter === "local" ? "all" : "local")}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 border text-[8.5px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
+                    historyFilter === "local"
+                      ? "border-[var(--fs-accent)] bg-[var(--fs-card-hi)] text-white"
+                      : "border-[var(--fs-line-soft)] bg-[var(--fs-card)] text-[var(--fs-dim)] hover:text-white"
+                  }`}
+                >
+                  <Wifi size={11} className="rotate-90" />
+                  Local ({localSessionsCount})
+                </button>
+
+                {availableServers.map((serverKey) => {
+                  const count = historyData.filter(
+                    (s) => !isSessionLocal(s) && normalizeServer(s.server) === serverKey
+                  ).length;
+                  if (count === 0) return null;
+                  return (
+                    <button
+                      key={serverKey}
+                      type="button"
+                      onClick={() =>
+                        setHistoryFilter(historyFilter === serverKey ? "cloud" : serverKey)
+                      }
+                      className={`px-2.5 py-1.5 border text-[8.5px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
+                        historyFilter === serverKey
+                          ? "border-[var(--fs-accent)] bg-[var(--fs-card-hi)] text-white"
+                          : "border-[var(--fs-line-soft)] bg-[var(--fs-card)] text-[var(--fs-dim)] hover:text-white"
+                      }`}
+                    >
+                      {getServerMeta(serverKey).label} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {historyError && filteredHistory.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 mb-3 border border-red-500/30 bg-red-500/10">
+                <span className="text-[9.5px] font-bold text-red-300">{historyError}</span>
+                <button
+                  type="button"
+                  onClick={fetchHistory}
+                  className="text-[8.5px] font-black uppercase tracking-widest text-red-200 hover:text-white cursor-pointer"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {historyLoading ? (
+              <div className="flex flex-col items-center justify-center py-16">
+                <Loader2 size={26} className="text-[var(--fs-accent)] animate-spin mb-4" />
+                <p className="text-[9.5px] font-black text-[var(--fs-dim)] uppercase tracking-widest">
+                  Syncing database…
+                </p>
+              </div>
+            ) : historyError && filteredHistory.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <span className="w-14 h-14 grid place-items-center border border-red-500/30 bg-red-500/10 mb-4">
+                  <RefreshCw size={22} className="text-red-400" />
+                </span>
+                <h2 className="fs-display text-[17px] text-red-300 mb-1">History unavailable</h2>
+                <p className="text-[9.5px] text-[var(--fs-ghost)] font-bold uppercase tracking-widest mb-5">
+                  {historyError}
+                </p>
+                <button
+                  type="button"
+                  onClick={fetchHistory}
+                  className="px-4 py-2 border border-[var(--fs-line)] bg-[var(--fs-card)] text-[9px] font-black uppercase tracking-widest text-white hover:border-white/40 transition-colors cursor-pointer"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : filteredHistory.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <span className="w-14 h-14 grid place-items-center border border-dashed border-[var(--fs-line)] bg-[var(--fs-card)] mb-4">
+                  <History size={22} className="text-[var(--fs-dim)]" />
+                </span>
+                <h2 className="fs-display text-[17px] mb-1">
+                  {historyData.length > 0 ? "No matching auctions" : "No auctions yet"}
+                </h2>
+                <p className="text-[9.5px] text-[var(--fs-ghost)] font-bold uppercase tracking-widest mb-4">
+                  {historyData.length > 0
+                    ? "No auctions found for this filter tab."
+                    : "Create or join a room to start bidding!"}
+                </p>
+                {historyData.length > 0 && historyFilter !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => setHistoryFilter("all")}
+                    className="px-3.5 py-2 bg-[var(--fs-accent)] text-[var(--fs-deep)] font-black text-[9px] uppercase tracking-wider hover:bg-white transition-colors cursor-pointer"
+                  >
+                    Show all auctions ({historyData.length})
+                  </button>
                 )}
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+                {filteredHistory.map((session) => {
+                  const teamMeta = TEAMS.find((t) => t.id === session.teamId);
+                  const isExpanded = expandedSession === session.id;
+                  const isCompleted = session.status === "completed";
+                  const isActive = session.status === "active";
+                  const overseasCount = countOverseas(session.squad, IPL_PLAYERS);
+                  const serverLabel = getServerMeta(session.server).label;
+
+                  /* The design's ledger row: franchise chip · player · franchise · price */
+                  return (
+                    <div key={session.id}>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setExpandedSession(isExpanded ? null : session.id)}
+                        onKeyDown={(e) =>
+                          (e.key === "Enter" || e.key === " ") &&
+                          setExpandedSession(isExpanded ? null : session.id)
+                        }
+                        className={`fs-table-row cursor-pointer transition-colors ${
+                          isExpanded
+                            ? "bg-[var(--fs-card-hi)]"
+                            : "bg-[var(--fs-card)] hover:bg-[#0f2237]"
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <b className="truncate">{teamMeta?.name || session.teamName}</b>
+                          <small>Room {session.roomId}</small>
+                        </span>
+
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <em className="not-italic px-1.5 py-0.5 text-[7.5px] font-black uppercase tracking-wider bg-[#1a4f7d] text-[#9bcaff]">
+                            {serverLabel}
+                          </em>
+                          <em className="not-italic px-1.5 py-0.5 text-[7.5px] font-black uppercase tracking-wider bg-[#1a3046] text-[var(--fs-label)]">
+                            {session.mode}
+                          </em>
+                        </span>
+
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="not-italic px-1.5 py-0.5 text-[7.5px] font-black uppercase tracking-wider shrink-0"
+                            style={{
+                              background:
+                                isCompleted ? "#1b3a22" : isActive ? "#153a2c" : session.status === "paused" ? "#3d3413" : "#1a3046",
+                              color:
+                                isCompleted ? "#b9dba5" : isActive ? "#7ee2b0" : session.status === "paused" ? "#f0c869" : "var(--fs-label)",
+                            }}
+                          >
+                            {session.status}
+                          </span>
+                          <span className="text-[9px] text-[var(--fs-faint)] font-bold uppercase tracking-wider truncate">
+                            {session.squad.length} players
+                          </span>
+                        </span>
+
+                        <span className="flex items-center justify-end gap-2">
+                          <strong className="whitespace-nowrap">
+                            {session.spent === null ? "—" : `₹${formatCrores(session.spent, 1)} Cr`}
+                          </strong>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSessionToDelete(session);
+                            }}
+                            title="Delete history"
+                            aria-label="Delete history"
+                            className="p-1 text-[var(--fs-ghost)] hover:text-red-400 transition-colors cursor-pointer"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                          <ChevronDown
+                            size={13}
+                            className={`text-[var(--fs-ghost)] transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`}
+                          />
+                        </span>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="border border-t-0 border-[var(--fs-line-soft)] bg-[var(--fs-deep-chip)] p-4 space-y-3">
+                          {isCompleted ? (
+                            <>
+                              <div className="fs-squad-summary">
+                                <span>
+                                  Budget left
+                                  <b>
+                                    {session.budgetRemaining == null
+                                      ? "—"
+                                      : `₹${formatCrores(session.budgetRemaining)} Cr`}
+                                  </b>
+                                </span>
+                                <span>
+                                  Overseas
+                                  <b>
+                                    {overseasCount}/{session.overseasLimit}
+                                  </b>
+                                </span>
+                                <span>
+                                  Squad
+                                  <b>
+                                    {session.squad.length}/{session.squadLimit}
+                                  </b>
+                                </span>
+                              </div>
+
+                              {["Batsman", "Wicket-Keeper", "All-Rounder", "Bowler"].map((role) => {
+                                const rolePlayers = session.squad.filter((p) => p?.role === role);
+                                if (rolePlayers.length === 0) return null;
+                                return (
+                                  <div key={role}>
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                      <span className="fs-label text-[var(--fs-accent)]">{role}s</span>
+                                      <span className="flex-1 h-px bg-[var(--fs-line-soft)]" />
+                                      <span className="fs-num text-[11px] text-[var(--fs-dim)]">
+                                        {rolePlayers.length}
+                                      </span>
+                                    </div>
+                                    <div className="fs-roster" style={{ maxHeight: "none", padding: 0 }}>
+                                      {rolePlayers.map((p, idx) => (
+                                        <div key={idx}>
+                                          <span className="flex items-center gap-2.5 min-w-0">
+                                            <span className="fs-avatar">
+                                              {p?.image ? (
+                                                <img src={p.image} alt="" loading="lazy" />
+                                              ) : (
+                                                (p?.name || "P").slice(0, 2).toUpperCase()
+                                              )}
+                                            </span>
+                                            <span className="min-w-0">
+                                              <b className="truncate">{p?.name}</b>
+                                              <small className="flex items-center gap-1.5">
+                                                {p?.type}
+                                                {isOverseasPlayer(p) && (
+                                                  <Wifi size={8} className="rotate-90 text-[#9bcaff]" />
+                                                )}
+                                              </small>
+                                            </span>
+                                          </span>
+                                          <b>
+                                            {p?.bid == null ? "—" : `₹${formatCrores(p.bid)} Cr`}
+                                          </b>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              {session.squad.length === 0 && (
+                                <p className="text-center text-[9.5px] text-[var(--fs-ghost)] font-bold uppercase py-4">
+                                  No players acquired in this session
+                                </p>
+                              )}
+
+                              <button
+                                onClick={() =>
+                                  navigate(
+                                    withServerParam(`/summary/${session.roomId}`, session.server)
+                                  )
+                                }
+                                className="fs-resume-btn flex items-center justify-center gap-2"
+                              >
+                                <Trophy size={12} /> View full summary
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex items-start gap-2.5 p-3 border border-[var(--fs-line-soft)] bg-[var(--fs-card)]">
+                                {isActive ? (
+                                  <Zap size={14} className="text-[var(--fs-accent)] mt-0.5 shrink-0" />
+                                ) : (
+                                  <Clock size={14} className="text-[var(--fs-dim)] mt-0.5 shrink-0" />
+                                )}
+                                <div>
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-white">
+                                    {isActive ? "Auction in progress" : "Auction not started"}
+                                  </p>
+                                  <p className="text-[9px] text-[var(--fs-ghost)] font-medium mt-0.5 leading-relaxed">
+                                    {isActive
+                                      ? session.isLocal
+                                        ? "Saved on this device — resume right where you left off."
+                                        : "Bidding is live right now — jump back in to keep building your squad."
+                                      : "This room is still waiting in the lobby for the host to start bidding."}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() =>
+                                  navigate(
+                                    withServerParam(
+                                      session.isLocal
+                                        ? `/auction/${session.roomId}`
+                                        : `/lobby/${session.roomId}`,
+                                      session.server
+                                    )
+                                  )
+                                }
+                                className="fs-resume-btn flex items-center justify-center gap-2"
+                              >
+                                <Zap size={12} /> {isActive ? "Resume auction" : "Resume / join auction"}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
             {notice && (
-              <p className="mt-4 text-xs text-amber-400 font-bold text-center">
-                {notice}
-              </p>
+              <p className="mt-4 text-[11px] text-amber-300 font-bold text-center">{notice}</p>
             )}
-
             {error && (
-              <p className="mt-4 text-xs text-red-500 font-bold text-center">
-                {error}
-              </p>
+              <p className="mt-4 text-[11px] text-red-400 font-bold text-center">{error}</p>
             )}
           </div>
-        </div>
-      </PanelSurface>
+        )}
+      </div>
 
       <ConfirmDialog
         isOpen={!!sessionToDelete}
-        title="Delete This Room?"
+        title="Delete this room?"
         description="This permanently removes the room and its squad history for everyone. This action cannot be undone."
         detail={sessionToDelete ? `Room ${sessionToDelete.roomId}` : ""}
         confirmLabel="Delete"
@@ -1957,11 +1598,11 @@ const LandingPage = () => {
       />
 
       <AdSlot className="mt-8 mb-4 px-2.5 sm:px-4" />
-
-      <CommunitySection />
-
       <Footer />
-      </main>
+
+      <p className="fs-landing-footer">
+        Fan-made simulator · Not affiliated with BCCI, the IPL or any franchise
+      </p>
     </div>
   );
 };
