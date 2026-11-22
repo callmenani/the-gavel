@@ -13,14 +13,14 @@ import { Crosshair } from 'lucide-react';
 /* ── Brand lockup ─────────────────────────────────────────────────────────
    The lime, skewed tile is the signature mark of the design. On the landing
    page it links home; in the app shell it is inert. */
-export const Brand = ({ compact = false, asLink = true, subtitle = 'AUCTION ENGINE' }) => {
+export const Brand = ({ compact = false, asLink = true, subtitle = 'GAME' }) => {
   const inner = (
     <>
       <span className="fs-brand-mark">
         <Crosshair size={25} strokeWidth={2.5} />
       </span>
       <span className="fs-brand-text">
-        <b>CrickAuction</b>
+        <b>IPL Auction</b>
         <small>{subtitle}</small>
       </span>
     </>
@@ -33,7 +33,7 @@ export const Brand = ({ compact = false, asLink = true, subtitle = 'AUCTION ENGI
   }
 
   return (
-    <Link to="/" className={className} aria-label="CrickAuction home">
+    <Link to="/" className={className} aria-label="IPL Auction Game home">
       {inner}
     </Link>
   );

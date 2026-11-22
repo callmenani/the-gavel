@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquarePlus, X, Send, Star, CheckCircle2, Loader2 } from 'lucide-react';
+import { X, Send, Star, CheckCircle2, Loader2 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,7 +13,6 @@ const CATEGORIES = [
 ];
 
 const FeedbackModal = () => {
-  const location = useLocation();
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [rating, setRating] = useState(5);
@@ -31,9 +29,6 @@ const FeedbackModal = () => {
     window.addEventListener('open-feedback-modal', handleOpen);
     return () => window.removeEventListener('open-feedback-modal', handleOpen);
   }, []);
-
-  // Show feedback button strictly on landing page only
-  if (location.pathname !== '/') return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -82,22 +77,6 @@ const FeedbackModal = () => {
 
   return (
     <>
-      {/* Floating Feedback FAB */}
-      <motion.button
-        id="feedback-fab-button"
-        onClick={() => setIsOpen(true)}
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        whileHover={{ scale: 1.05, y: -2 }}
-        whileTap={{ scale: 0.95 }}
-        className="fixed bottom-6 right-6 z-[90] flex items-center gap-2 bg-[#0a0a0a]/80 hover:bg-white/10 text-white px-3.5 py-2 rounded-full border border-white/10 hover:border-white/25 backdrop-blur-xl shadow-2xl transition-all duration-300 group cursor-pointer"
-      >
-        <MessageSquarePlus className="w-3.5 h-3.5 text-slate-300 group-hover:text-white" />
-        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/70 group-hover:text-white transition-colors duration-300">
-          Feedback
-        </span>
-      </motion.button>
-
       {/* Modal */}
       <AnimatePresence>
         {isOpen && (
@@ -137,7 +116,7 @@ const FeedbackModal = () => {
                   Share Feedback
                 </h3>
                 <p className="text-[7.5px] font-black text-gray-500 uppercase tracking-widest mt-1">
-                  Help make TheGavel better
+                  Help make IPL Auction Game better
                 </p>
               </div>
 

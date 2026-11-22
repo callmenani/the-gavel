@@ -1,6 +1,6 @@
 <div align="center">
 
-  # TheGavel
+  # IPL Auction Game
   ### *The ultimate real-time SaaS auction, live multiplayer bidding, and AI squad evaluation engine.*
 
   [![React](https://img.shields.io/badge/React-19.2-20232A?style=flat-square&logo=react&logoColor=61DAFB)](https://reactjs.org/)
@@ -32,7 +32,7 @@
 
 One host can run an auction room, but running a competitive multiplayer auction across 10 friends creates a complex synchronization challenge: synchronized bid countdowns, real-time purse calculations, overseas player quotas, squad limits, and sub-second latency.
 
-**TheGavel** is built for that challenge. Create a private lobby with friends or play Solo against autonomous bots. For every player that comes under the hammer, universal clock-drift synchronization guarantees fair bidding across all devices.
+**IPL Auction Game** is built for that challenge. Create a private lobby with friends or play Solo against autonomous bots. For every player that comes under the hammer, universal clock-drift synchronization guarantees fair bidding across all devices.
 
 ---
 
@@ -76,7 +76,7 @@ One host can run an auction room, but running a competitive multiplayer auction 
 ## How It Works
 
 ### 1. Public Directory & Edge Indexing
-When you open TheGavel, the app queries the **Cloudflare D1 edge directory** to load active public lobbies and platform statistics instantly without burdening the live bidding cluster.
+When you open IPL Auction Game, the app queries the **Cloudflare D1 edge directory** to load active public lobbies and platform statistics instantly without burdening the live bidding cluster.
 
 ### 2. Isolated Auction Nodes
 Creating a multiplayer room provisions an isolated node on the selected **Firebase RTDB** cluster. Creating a solo room spins up an entirely local, in-memory auction engine with zero server dependency.
@@ -140,4 +140,4 @@ When the auction completes, squad snapshots are persisted to **Cloudflare D1**. 
 ---
 
 ## License
-TheGavel is available under the [Apache License 2.0](LICENSE).
+IPL Auction Game is available under the [Apache License 2.0](LICENSE).

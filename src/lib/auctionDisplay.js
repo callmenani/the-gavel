@@ -28,7 +28,7 @@ export const r2 = (value) => {
 };
 
 /**
- * Canonical overseas rule for TheGavel:
+ * Canonical overseas rule for IPL Auction Game:
  * only the exact country code "IND" is Indian. Missing, empty, or any other
  * country value is overseas.
  */

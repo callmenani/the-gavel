@@ -44,7 +44,7 @@ const buildLots = () =>
     .map((player) => ({ player, price: hammerPrice(player) }));
 
 export default function PlayersUnderHammer({ stats = null }) {
-  const lots = useMemo(buildLots, []);
+  const lots = useMemo(() => buildLots(), []);
   const pageCount = Math.max(1, Math.ceil(lots.length / PAGE_SIZE));
 
   const [page, setPage] = useState(0);

@@ -71,7 +71,7 @@ export default function Footer20() {
               to="/"
               className="inline-flex items-center gap-2 font-pixel text-xl sm:text-2xl text-white select-none tracking-tight w-fit"
             >
-              TheGavel
+              IPL Auction Game
             </Link>
 
             {/* Description */}
@@ -101,7 +101,7 @@ export default function Footer20() {
                 />
               </a>
               <p className="text-[11px] text-gray-400 uppercase tracking-wider mt-2">
-                © {currentYear} TheGavel. All rights reserved.
+                © {currentYear} IPL Auction Game. All rights reserved.
               </p>
             </div>
           </motion.div>
@@ -262,7 +262,7 @@ export default function Footer20() {
           className="pt-6 pb-8 border-t border-white/[0.06] text-xs text-gray-500 leading-relaxed max-w-4xl"
         >
           <p>
-            <strong className="text-gray-400 font-medium">Disclaimer:</strong> TheGavel is an independent, fan-made tactical cricket simulation game developed strictly for educational and entertainment purposes. It is not affiliated with, endorsed by, sponsored by, or associated with the Board of Control for Cricket in India (BCCI), the Indian Premier League (IPL), or any participating franchise. All team names, logos, player names, and associated trademarks remain the sole intellectual property of their respective rights holders.
+            <strong className="text-gray-400 font-medium">Disclaimer:</strong> IPL Auction Game is an independent, fan-made tactical cricket simulation game developed strictly for educational and entertainment purposes. It is not affiliated with, endorsed by, sponsored by, or associated with the Board of Control for Cricket in India (BCCI), the Indian Premier League (IPL), or any participating franchise. All team names, logos, player names, and associated trademarks remain the sole intellectual property of their respective rights holders.
           </p>
         </motion.div>
 
@@ -275,7 +275,7 @@ export default function Footer20() {
             className="w-full h-auto select-none transition-colors duration-300"
             viewBox="0 32 1100 80"
             preserveAspectRatio="xMidYMid meet"
-            aria-label="THEGAVEL"
+            aria-label="IPL AUCTION GAME"
           >
             <defs>
               <linearGradient
@@ -302,7 +302,7 @@ export default function Footer20() {
               className="font-pixel font-black tracking-tighter"
               fontSize="135"
             >
-              THEGAVEL
+              IPL AUCTION GAME
             </text>
           </svg>
         </motion.div>

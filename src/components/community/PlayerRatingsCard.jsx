@@ -5,7 +5,6 @@ import { RATINGS_V2_CONFIG } from '../../data/feedback';
 export default function PlayerRatingsCard() {
   const openFeedback = () => {
     window.dispatchEvent(new CustomEvent('open-feedback-modal'));
-    document.getElementById('feedback-fab-button')?.click();
   };
 
   const progressPercent = Math.min(100, Math.max(0, RATINGS_V2_CONFIG.progress || 40));

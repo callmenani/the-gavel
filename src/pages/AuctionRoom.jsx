@@ -71,7 +71,7 @@ import {
 
 const AuctionRoom = () => {
    const { id } = useParams();
-   useDocumentTitle(`Auction Room #${id || ''} | TheGavel`, 'Live multiplayer IPL Auction bidding arena.', true);
+   useDocumentTitle(`Auction Room #${id || ''} | IPL Auction Game`, 'Live multiplayer IPL Auction bidding arena.', true);
    const navigate = useNavigate();
    const { server, ready: serverReady } = useRoomServer(id);
    const {

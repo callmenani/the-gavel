@@ -67,7 +67,7 @@ const useIsMobile = () => {
 
 const Lobby = () => {
   const { id } = useParams();
-  useDocumentTitle(`Lobby ${id ? `#${id}` : ''} | TheGavel`, 'Live franchise team selection and auction hub.', true);
+  useDocumentTitle(`Lobby ${id ? `#${id}` : ''} | IPL Auction Game`, 'Live franchise team selection and auction hub.', true);
   const { server, ready: serverReady } = useRoomServer(id);
   const { user, loginWithGoogle, loginAsGuest, loading: authLoading } = useAuth();
   const {

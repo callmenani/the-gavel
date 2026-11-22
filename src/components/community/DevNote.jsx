@@ -7,7 +7,6 @@ export default function DevNote() {
 
   const openFeedback = () => {
     window.dispatchEvent(new CustomEvent('open-feedback-modal'));
-    document.getElementById('feedback-fab-button')?.click();
   };
 
   return (

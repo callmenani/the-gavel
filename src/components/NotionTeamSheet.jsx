@@ -245,7 +245,7 @@ export default function NotionTeamSheet({ roomTeams = [], auction, topPlayers = 
           )}
 
           <p className="text-[9px] sm:text-[10px] font-semibold text-[#8a8f98] text-center">
-            TheGavel • fan-made auction • 🌐 = overseas player
+            IPL Auction Game • fan-made auction • 🌐 = overseas player
           </p>
         </div>
       </div>

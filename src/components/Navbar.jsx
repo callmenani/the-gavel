@@ -32,8 +32,8 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-4">
         <Link
           to="/"
-          className="flex items-center gap-2 sm:gap-2.5 font-pixel text-lg sm:text-xl md:text-2xl tracking-tight text-white select-none group shrink-0"
-          aria-label="TheGavel Home"
+          className="flex items-center gap-2 sm:gap-2.5 font-pixel text-xs sm:text-sm md:text-base tracking-tight text-white select-none group shrink-0"
+          aria-label="IPL Auction Game Home"
           onClick={() => setMobileOpen(false)}
         >
           <img
@@ -41,9 +41,9 @@ const Navbar = () => {
             alt=""
             width="28"
             height="28"
-            className="w-6 h-6 sm:w-7 sm:h-7 object-contain drop-shadow-[0_2px_8px_rgba(220,38,38,0.4)] group-hover:rotate-12 transition-transform duration-300 shrink-0"
+            className="w-6 h-6 sm:w-7 sm:h-7 object-contain drop-shadow-[0_2px_8px_rgba(229,255,63,0.35)] transition-transform duration-300 shrink-0"
           />
-          <span>TheGavel</span>
+          <span>IPL Auction Game</span>
         </Link>
 
         <nav

@@ -104,7 +104,7 @@ export const DEV_NOTE_CONFIG = {
   role: 'Creator & Developer',
   avatarUrl: 'https://github.com/harshavardhan.png',
   heading: 'NOTE FROM THE DEV',
-  copy: "Hey, I'm Harshavardhan, building building TheGavel between classes. It runs on a student budget (free tiers), so yes, sometimes it lags. I read every piece of feedback, even the angry ones, and I'm fixing things one by one. Thanks for sticking around.",
+  copy: "Hey, I'm Harshavardhan, building building IPL Auction Game between classes. It runs on a student budget (free tiers), so yes, sometimes it lags. I read every piece of feedback, even the angry ones, and I'm fixing things one by one. Thanks for sticking around.",
   chips: [
     'Free-tier hosting',
     'Solo dev',

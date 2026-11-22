@@ -1,4 +1,4 @@
--- Cloudflare D1 SQLite Schema for TheGavel
+-- Cloudflare D1 SQLite Schema for IPL Auction Game
 -- Replaces Supabase PostgreSQL tables: auctions, teams
 
 CREATE TABLE IF NOT EXISTS auctions (
