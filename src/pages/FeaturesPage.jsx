@@ -42,8 +42,8 @@ const ITEMS = [
 
 export default function FeaturesPage() {
   useDocumentTitle(
-    'Features | TheGavel',
-    'Explore TheGavel platform capabilities: multiplayer auctions, solo bots, AI ratings, and edge infrastructure.',
+    'Features | IPL Auction Game',
+    'Explore IPL Auction Game platform capabilities: multiplayer auctions, solo bots, AI ratings, and edge infrastructure.',
   );
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export default function FeaturesPage() {
         </p>
         <h1 className="text-3xl sm:text-4xl font-pixel text-white">Features</h1>
         <p className="mt-4 text-sm text-slate-400 leading-relaxed">
-          TheGavel is structured as a production-style web app: marketing surfaces on the home page,
+          IPL Auction Game is structured as a production-style web app: marketing surfaces on the home page,
           operational workflows in the play hub, and reference content in guide and about pages.
         </p>
 

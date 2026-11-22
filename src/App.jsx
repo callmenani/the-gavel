@@ -6,7 +6,6 @@ import { QuotaProvider } from './contexts/QuotaContext'
 import { ConnectionAlertProvider } from './contexts/ConnectionAlertContext'
 import ScrollToTop from './components/ScrollToTop'
 import PageLoader from './components/PageLoader'
-import HomePage from './pages/HomePage'
 import LandingPage from './pages/LandingPage'
 import './index.css'
 
@@ -51,7 +50,7 @@ function App() {
                 </Suspense>
 
                 <Routes>
-                  <Route path="/" element={<HomePage />} />
+                  <Route path="/" element={<LandingPage />} />
                   <Route path="/play" element={<LandingPage />} />
                   <Route path="/play/join" element={<LandingPage />} />
                   <Route path="/play/history" element={<LandingPage />} />

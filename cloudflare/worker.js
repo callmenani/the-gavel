@@ -1,5 +1,5 @@
 /**
- * Cloudflare Worker API for TheGavel Directory & History
+ * Cloudflare Worker API for IPL Auction Game Directory & History
  * Database: Cloudflare D1 (SQLite)
  */
 

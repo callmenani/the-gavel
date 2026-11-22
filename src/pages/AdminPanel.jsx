@@ -171,7 +171,7 @@ const getPlayerKeyStats = (player) => {
 };
 
 const AdminPanel = () => {
-  useDocumentTitle('Admin Control Hub | TheGavel', 'Administrative management panel.', true);
+  useDocumentTitle('Admin Control Hub | IPL Auction Game', 'Administrative management panel.', true);
   const navigate = useNavigate();
   const { user, loginWithGoogle, logout } = useAuth();
   const { handleFirebaseError } = useQuota();
@@ -647,7 +647,7 @@ const AdminPanel = () => {
             ADMIN PORTAL ACCESS
           </h2>
           <p className="text-xs sm:text-sm text-slate-400 font-normal leading-relaxed mb-6 sm:mb-8">
-            Authentication required to access the TheGavel system management dashboard.
+            Authentication required to access the IPL Auction Game system management dashboard.
           </p>
 
           <button

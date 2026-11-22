@@ -5,8 +5,8 @@ import useDocumentTitle from '../hooks/useDocumentTitle';
 
 export default function CommunityPage() {
   useDocumentTitle(
-    'Community | TheGavel',
-    'Feedback, ratings, and community updates from TheGavel players and contributors.',
+    'Community | IPL Auction Game',
+    'Feedback, ratings, and community updates from IPL Auction Game players and contributors.',
   );
 
   useEffect(() => {
@@ -22,7 +22,7 @@ export default function CommunityPage() {
           </p>
           <h1 className="text-2xl sm:text-3xl font-pixel text-white">Community</h1>
           <p className="mt-3 text-sm text-slate-400">
-            Share feedback, follow updates, and see what other managers are saying about TheGavel.
+            Share feedback, follow updates, and see what other managers are saying about IPL Auction Game.
           </p>
         </div>
         <CommunitySection />

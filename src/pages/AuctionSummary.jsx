@@ -53,7 +53,7 @@ import {
 
 const AuctionSummary = () => {
   const { id } = useParams();
-  useDocumentTitle(`Auction Summary #${id || ''} | TheGavel`, 'Final squad rosters and auction summary.', true);
+  useDocumentTitle(`Auction Summary #${id || ''} | IPL Auction Game`, 'Final squad rosters and auction summary.', true);
   const navigate = useNavigate();
   const location = useLocation();
   const { server, ready: serverReady } = useRoomServer(id);
@@ -846,7 +846,7 @@ const AuctionSummary = () => {
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-[11px] font-pixel uppercase tracking-wider text-white">TheGavel</div>
+                            <div className="text-[11px] font-pixel uppercase tracking-wider text-white">IPL Auction Game</div>
                             <div className="text-[9px] font-mono text-slate-500">thegavel.in</div>
                           </div>
                         </div>
@@ -907,7 +907,7 @@ const AuctionSummary = () => {
 
                         {/* Footer */}
                         <div className="relative z-10 mt-5 pt-3 border-t border-white/10 flex items-center justify-between text-[8px] font-pixel uppercase tracking-widest text-slate-500">
-                          <span>Verified by TheGavel Simulation Engine</span>
+                          <span>Verified by IPL Auction Game Simulation Engine</span>
                           <span className="font-mono">thegavel.in</span>
                         </div>
                       </div>

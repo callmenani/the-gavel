@@ -1,7 +1,7 @@
-# TheGavel — Branching Strategy
+# IPL Auction Game — Branching Strategy
 
 This document is the single source of truth for how work moves through the
-TheGavel repository. It is written for humans **and** for AI agents that operate
+IPL Auction Game repository. It is written for humans **and** for AI agents that operate
 this repo. If a step below conflicts with an ad-hoc instruction, follow the
 branch model first and raise the conflict in the PR instead of deviating
 silently.

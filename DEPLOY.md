@@ -1,7 +1,7 @@
-# TheGavel — Deployment Guide
+# IPL Auction Game — Deployment Guide
 
 Rebuilt from a React 19 + Vite + Tailwind v4 auction simulator. This version is
-**rebranded to TheGavel**, ships with **light + dark mode** (toggle in the
+**rebranded to IPL Auction Game**, ships with **light + dark mode** (toggle in the
 top-right), and runs with **zero backend** — solo auctions work 100% in the
 browser against 9 AI bot franchises, no servers, no keys, no cost.
 
@@ -32,7 +32,7 @@ cd ipl-auction
 git remote remove origin          # drop the friend's repo
 git remote add origin https://github.com/harshavardhan/the-gavel
 git add -A
-git commit -m "Rebrand to TheGavel: light/dark theme, zero-backend solo deploy"
+git commit -m "Rebrand to IPL Auction Game: light/dark theme, zero-backend solo deploy"
 git push -u origin main
 ```
 
@@ -104,7 +104,7 @@ publisher id in Pages env vars (`VITE_ADSENSE_CLIENT_ID` + slot vars, see
 
 | Area | Original | This build |
 |------|----------|-----------|
-| Name / logo / labels | CrickAuction, cricket ball | TheGavel, gavel logo |
+| Name / logo / labels | IPL Auction Game, cricket ball | IPL Auction Game, gavel logo |
 | Theming | dark-only | light + dark with persisted toggle |
 | Backend | Firebase + Cloudflare required | zero-backend; solo works out of the box |
 | Auth | Firebase anonymous/Google | device-local identity when no keys |
