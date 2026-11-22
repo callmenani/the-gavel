@@ -1,5 +1,6 @@
 import { localAuctionReducer, saveLocalSoloRoom, isLocalRoom } from './localAuctionEngine.js';
 import { SERVER_LOCAL, withServerParam } from './auctionServers.js';
+import { cacheSummarySnapshot } from './summarySnapshot.js';
 
 /**
  * Calculates adaptive reaction delays for bot bidding, matching cloud room dynamics.
@@ -65,14 +66,27 @@ export function createSoloBotLoop({
       return null;
     }
 
-    // Celebration phase: wait until celebrationEndsAt expires before advancing
+    // Celebration phase: wait until celebrationEndsAt expires, then open the
+    // consent gate on a sold lot, or advance directly on an unsold lot.
     if (currentLot && (currentLot.status === 'sold' || currentLot.status === 'unsold')) {
       const celebrationLimit = currentLot.celebrationEndsAt || currentLot.timerEndsAt || 0;
       if (now >= celebrationLimit) {
+        if (currentLot.status === 'sold') {
+          updateState({ type: 'OPEN_CONSENT', now });
+          return 'OPEN_CONSENT';
+        }
         updateState({ type: 'ADVANCE_LOT', now });
         return 'ADVANCE_LOT';
       }
       return 'CELEBRATING';
+    }
+
+    // Consent gate: a sold lot waits for every manager to confirm (bots fill in
+    // via CONSENT_TICK) or the 30s safety deadline. The host's own Confirm tap
+    // is driven from the UI (CONSENT_VOTE), so the gate stays visible.
+    if (currentLot && currentLot.status === 'awaiting_consent') {
+      updateState({ type: 'CONSENT_TICK', now, rngSeed: now & 0xffff });
+      return 'CONSENT_TICK';
     }
 
     if (currentLot && currentLot.status === 'bidding') {
@@ -228,8 +242,13 @@ export async function handleSoloEndAuction({
     if (next && saveFn) {
       saveFn(next, synced);
     }
+    if (next) {
+      cacheSummarySnapshot(roomId, next, next.roomTeams || next.teams || []);
+    }
     if (navigate) {
-      navigate(withServerParam(`/summary/${roomId}`, SERVER_LOCAL));
+      navigate(withServerParam(`/summary/${roomId}`, SERVER_LOCAL), {
+        state: { defaultTab: 'league' },
+      });
     }
     return { handled: true, next, synced };
   }

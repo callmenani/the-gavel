@@ -4,11 +4,14 @@ import './index.css'
 import './styles/figma.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary'
+import { ThemeProvider } from './contexts/ThemeContext'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </ErrorBoundary>
   </StrictMode>,
 )

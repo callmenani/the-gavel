@@ -40,6 +40,9 @@ export default function useRoomServer(roomId) {
     const hint = getServerFromSearch(searchStr);
 
     if (isLocalRoom(roomId, hint, Boolean(loadLocalSoloRoom(roomId)))) {
+      // Deliberate synchronous resolve: local solo rooms must be ready on the
+      // same tick (zero-latency fast-path, no network round-trip).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResolution({
         roomId,
         server: SERVER_LOCAL,

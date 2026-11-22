@@ -10,7 +10,7 @@ export const seedPlayers = async () => {
       await setDoc(doc(playersRef, player.id), player);
     }
     // Players seeded successfully!
-  } catch (error) {
+  } catch {
     // Error seeding players
   }
 };
@@ -31,7 +31,7 @@ export const createInitialAuction = async (auctionId) => {
       }
     });
     // Initial auction created!
-  } catch (error) {
+  } catch {
     // Error creating initial auction
   }
 };

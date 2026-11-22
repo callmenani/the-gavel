@@ -71,7 +71,7 @@ export default function Footer20() {
               to="/"
               className="inline-flex items-center gap-2 font-pixel text-xl sm:text-2xl text-white select-none tracking-tight w-fit"
             >
-              CrickAuction
+              TheGavel
             </Link>
 
             {/* Description */}
@@ -92,7 +92,7 @@ export default function Footer20() {
                 <span>
                   Concept crafted by{' '}
                   <span className="text-white underline underline-offset-2">
-                    Shaurya Upadhyay
+                    Harshavardhan
                   </span>
                 </span>
                 <ArrowUpRight
@@ -101,7 +101,7 @@ export default function Footer20() {
                 />
               </a>
               <p className="text-[11px] text-gray-400 uppercase tracking-wider mt-2">
-                © {currentYear} CrickAuction. All rights reserved.
+                © {currentYear} TheGavel. All rights reserved.
               </p>
             </div>
           </motion.div>
@@ -120,6 +120,30 @@ export default function Footer20() {
                     className="text-[14px] text-gray-400 hover:text-white transition-colors"
                   >
                     Home
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/play"
+                    className="text-[14px] text-gray-400 hover:text-white transition-colors"
+                  >
+                    Play Hub
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/features"
+                    className="text-[14px] text-gray-400 hover:text-white transition-colors"
+                  >
+                    Features
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/community"
+                    className="text-[14px] text-gray-400 hover:text-white transition-colors"
+                  >
+                    Community
                   </Link>
                 </li>
                 <li>
@@ -192,7 +216,7 @@ export default function Footer20() {
               <ul className="flex flex-col gap-2.5">
                 <li>
                   <a
-                    href="https://github.com/Shaurya01836/ipl-auction"
+                    href="https://github.com/harshavardhan/the-gavel"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-[14px] text-gray-400 hover:text-white transition-colors group/git"
@@ -238,7 +262,7 @@ export default function Footer20() {
           className="pt-6 pb-8 border-t border-white/[0.06] text-xs text-gray-500 leading-relaxed max-w-4xl"
         >
           <p>
-            <strong className="text-gray-400 font-medium">Disclaimer:</strong> CrickAuction is an independent, fan-made tactical cricket simulation game developed strictly for educational and entertainment purposes. It is not affiliated with, endorsed by, sponsored by, or associated with the Board of Control for Cricket in India (BCCI), the Indian Premier League (IPL), or any participating franchise. All team names, logos, player names, and associated trademarks remain the sole intellectual property of their respective rights holders.
+            <strong className="text-gray-400 font-medium">Disclaimer:</strong> TheGavel is an independent, fan-made tactical cricket simulation game developed strictly for educational and entertainment purposes. It is not affiliated with, endorsed by, sponsored by, or associated with the Board of Control for Cricket in India (BCCI), the Indian Premier League (IPL), or any participating franchise. All team names, logos, player names, and associated trademarks remain the sole intellectual property of their respective rights holders.
           </p>
         </motion.div>
 
@@ -251,11 +275,11 @@ export default function Footer20() {
             className="w-full h-auto select-none transition-colors duration-300"
             viewBox="0 32 1100 80"
             preserveAspectRatio="xMidYMid meet"
-            aria-label="CRICKAUCTION"
+            aria-label="THEGAVEL"
           >
             <defs>
               <linearGradient
-                id="crickauction-watermark-gradient"
+                id="thegavel-watermark-gradient"
                 x1="0%"
                 y1="0%"
                 x2="0%"
@@ -274,11 +298,11 @@ export default function Footer20() {
               textAnchor="start"
               textLength="100%"
               lengthAdjust="spacing"
-              fill="url(#crickauction-watermark-gradient)"
+              fill="url(#thegavel-watermark-gradient)"
               className="font-pixel font-black tracking-tighter"
               fontSize="135"
             >
-              CRICKAUCTION
+              THEGAVEL
             </text>
           </svg>
         </motion.div>

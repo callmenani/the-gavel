@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuction } from '../contexts/AuctionContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useQuota } from '../contexts/QuotaContext';
@@ -23,14 +23,24 @@ import {
   Zap,
   Download,
   Loader2,
-  AlertCircle,Sparkles
+  AlertCircle,
+  Sparkles,
+  FileText,
+  CalendarDays,
 } from 'lucide-react';
+import LeagueScheduleTab from '../components/league/LeagueScheduleTab';
 import { motion, AnimatePresence } from 'framer-motion';
 import SquadRating from '../components/SquadRating';
+import NotionTeamSheet from '../components/NotionTeamSheet';
 import PageLoader from '../components/PageLoader';
 import useRoomServer from '../hooks/useRoomServer';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { isLocalRoom, loadLocalSoloRoom } from '../lib/localAuctionEngine';
+import {
+  loadSummarySnapshot,
+  normalizeSummaryAuction,
+  normalizeSummaryTeams,
+} from '../lib/summarySnapshot';
 import {
   computeTeamSpent,
   countOverseas,
@@ -43,14 +53,19 @@ import {
 
 const AuctionSummary = () => {
   const { id } = useParams();
-  useDocumentTitle(`Auction Summary #${id || ''} | CrickAuction`, 'Final squad rosters and auction summary.', true);
+  useDocumentTitle(`Auction Summary #${id || ''} | TheGavel`, 'Final squad rosters and auction summary.', true);
   const navigate = useNavigate();
+  const location = useLocation();
   const { server, ready: serverReady } = useRoomServer(id);
   const { currentAuction, roomTeams } = useAuction();
   const { user } = useAuth();
   const { handleFirebaseError } = useQuota();
   
-  const [activeTab, setActiveTab] = useState('squads');
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = location.state?.defaultTab;
+    const allowed = ['squads', 'sheet', 'leaderboard', 'fantasy', 'league'];
+    return allowed.includes(tab) ? tab : 'sheet';
+  });
   const [expandedTeam, setExpandedTeam] = useState(null);
   const [sharingTeamId, setSharingTeamId] = useState(null);
   const [copiedTeamId, setCopiedTeamId] = useState(null);
@@ -60,7 +75,7 @@ const AuctionSummary = () => {
   const [dbTeams, setDbTeams] = useState([]);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState(null);
-  const [summaryReloadKey, setSummaryReloadKey] = useState(0);
+  const [summaryReloadKey] = useState(0);
 
   const teamCardRefs = React.useRef({});
 
@@ -79,7 +94,7 @@ const AuctionSummary = () => {
             origin: { y: 0.8 },
             colors: ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#ffffff']
           });
-        } catch (_) {}
+        } catch { /* confetti unavailable or reduced-motion */ }
       }
 
       const width = 800;
@@ -141,19 +156,31 @@ const AuctionSummary = () => {
   // connections or quota usage.
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !serverReady) return;
     let isMounted = true;
-
-    // If live auction data is already present in memory from this active session, dismiss loading
-    if (currentAuction && currentAuction.id === id && roomTeams && roomTeams.length > 0) {
-      setSummaryLoading(false);
-    }
 
     const fetchSummaryFromPersistentStore = async () => {
       setSummaryLoading(true);
       setSummaryError(null);
       try {
-        const isLocal = isLocalRoom(id, server, true) || (typeof id === 'string' && id.startsWith('SOLO-')) || server === 'local';
+        const hasLocalStore = Boolean(loadLocalSoloRoom(id));
+        const isLocal = isLocalRoom(id, server, hasLocalStore);
+
+        if (currentAuction?.id === id && roomTeams?.length > 0) {
+          if (isMounted) {
+            setDbAuction(normalizeSummaryAuction(currentAuction, id));
+            setDbTeams(normalizeSummaryTeams(roomTeams, id));
+            setSummaryLoading(false);
+          }
+        }
+
+        const snapshot = loadSummarySnapshot(id);
+        if (snapshot?.auction && snapshot.teams?.length && isMounted) {
+          setDbAuction(normalizeSummaryAuction(snapshot.auction, id));
+          setDbTeams(normalizeSummaryTeams(snapshot.teams, id));
+          setSummaryLoading(false);
+        }
+
         if (isLocal) {
           const localData = loadLocalSoloRoom(id);
           if (localData && isMounted) {
@@ -169,12 +196,14 @@ const AuctionSummary = () => {
               settings: localData.settings || {},
               fastForwarded: Boolean(localData.fastForwarded),
             });
-            setDbTeams(localData.roomTeams || localData.teams || []);
+            setDbTeams(normalizeSummaryTeams(localData.roomTeams || localData.teams || [], id));
             setSummaryLoading(false);
             return;
           }
-          // No local save (cleared browser / another device): the completed
-          // auction may still have been copied to Supabase, so fall through.
+          // No local save: try snapshot (already applied) or cloud directory below.
+          if (snapshot?.teams?.length) {
+            return;
+          }
         }
 
         // 1. Persistent Directory store
@@ -323,7 +352,7 @@ const AuctionSummary = () => {
     fetchSummaryFromPersistentStore();
 
     return () => { isMounted = false; };
-  }, [id, summaryReloadKey]);
+  }, [id, summaryReloadKey, server, serverReady, currentAuction, roomTeams, handleFirebaseError]);
 
   const activeAuction = (currentAuction && currentAuction.id === id) ? currentAuction : dbAuction;
   const activeTeams = (roomTeams && roomTeams.length > 0 && currentAuction?.id === id) ? roomTeams : dbTeams;
@@ -371,7 +400,7 @@ const AuctionSummary = () => {
   const topPlayers = allSoldPlayers.slice(0, 5);
 
   if (!activeAuction && summaryError) {
-    const isDeviceNotFound = summaryError === 'device_not_found' || (typeof id === 'string' && id.startsWith('SOLO-')) || server === 'local';
+    const isDeviceNotFound = summaryError === 'device_not_found';
     return (
       <div className="h-screen-safe bg-[#050505] text-white flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto">
         <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4 text-gray-300">
@@ -446,11 +475,13 @@ const AuctionSummary = () => {
 
         {/* Tab Navigation */}
         <div className="mb-6 sm:mb-12">
-          <div className="bg-[#0c0d10] backdrop-blur-3xl p-1 sm:p-1.5 rounded-2xl border border-white/10 grid grid-cols-3 sm:flex sm:justify-center gap-1 sm:gap-2 max-w-full sm:max-w-max mx-auto shadow-2xl">
+          <div className="bg-[#0c0d10] backdrop-blur-3xl p-1 sm:p-1.5 rounded-2xl border border-white/10 grid grid-cols-4 sm:flex sm:justify-center gap-1 sm:gap-2 max-w-full sm:max-w-max mx-auto shadow-2xl">
             {[
+              { id: 'sheet', label: 'Sheet', fullLabel: 'Team Sheet', icon: FileText },
               { id: 'squads', label: 'Squads', fullLabel: 'Team Squads', icon: Users },
               { id: 'leaderboard', label: 'Top 5', fullLabel: 'Top Expensive', icon: Trophy },
               { id: 'fantasy', label: 'Ratings', fullLabel: 'Squad Ratings', icon: Sparkles },
+              { id: 'league', label: 'League', fullLabel: 'Schedule & Votes', icon: CalendarDays },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -471,7 +502,21 @@ const AuctionSummary = () => {
 
         {/* Content Section */}
         <AnimatePresence mode="wait">
-          {activeTab === 'leaderboard' ? (
+          {activeTab === 'sheet' ? (
+            <motion.section
+              key="sheet"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              className="pb-6"
+            >
+              <NotionTeamSheet
+                roomTeams={activeTeams}
+                auction={activeAuction}
+                topPlayers={topPlayers}
+              />
+            </motion.section>
+          ) : activeTab === 'leaderboard' ? (
             <motion.section
               key="leaderboard"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -551,6 +596,22 @@ const AuctionSummary = () => {
                 roomTeams={activeTeams}
                 currentAuction={activeAuction}
                 auctionId={id || activeAuction?.id}
+                isHost={isHost}
+              />
+            </motion.section>
+          ) : activeTab === 'league' ? (
+            <motion.section
+              key="league"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
+              <LeagueScheduleTab
+                auctionId={id || activeAuction?.id}
+                activeTeams={activeTeams}
+                activeAuction={activeAuction}
+                server={server}
+                user={user}
                 isHost={isHost}
               />
             </motion.section>
@@ -785,8 +846,8 @@ const AuctionSummary = () => {
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-[11px] font-pixel uppercase tracking-wider text-white">CrickAuction</div>
-                            <div className="text-[9px] font-mono text-slate-500">crickauction.in</div>
+                            <div className="text-[11px] font-pixel uppercase tracking-wider text-white">TheGavel</div>
+                            <div className="text-[9px] font-mono text-slate-500">thegavel.in</div>
                           </div>
                         </div>
 
@@ -846,8 +907,8 @@ const AuctionSummary = () => {
 
                         {/* Footer */}
                         <div className="relative z-10 mt-5 pt-3 border-t border-white/10 flex items-center justify-between text-[8px] font-pixel uppercase tracking-widest text-slate-500">
-                          <span>Verified by CrickAuction Simulation Engine</span>
-                          <span className="font-mono">crickauction.in</span>
+                          <span>Verified by TheGavel Simulation Engine</span>
+                          <span className="font-mono">thegavel.in</span>
                         </div>
                       </div>
                     </div>

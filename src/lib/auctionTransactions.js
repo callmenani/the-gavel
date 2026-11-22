@@ -136,7 +136,15 @@ export function transactAdvance(currentLive, {
 }) {
   if (!currentLive) return currentLive;
   if (currentLive.playerId !== currentPlayerId) return;
-  if (currentLive.status !== 'sold' && currentLive.status !== 'unsold') return;
+  // Awaiting-consent lots advance via the same transition (host force /
+  // everyone consented / safety deadline all funnel into transactAdvance).
+  if (
+    currentLive.status !== 'sold' &&
+    currentLive.status !== 'unsold' &&
+    currentLive.status !== 'awaiting_consent'
+  ) {
+    return;
+  }
 
   return {
     playerId: nextPlayerId,
@@ -146,5 +154,128 @@ export function transactAdvance(currentLive, {
     timerEndsAt,
     status: 'bidding',
     passes: null,
+    consentVotes: null,
+    consentDeadline: null,
+  };
+}
+
+/**
+ * Record one manager's confirmation in the consent gate. Idempotent: re-voting
+ * the same lot is a no-op (the lot is no longer awaiting_consent).
+ */
+export function transactConsentVote(currentLive, { voterId, now }) {
+  if (!currentLive) return currentLive;
+  if (currentLive.status !== 'awaiting_consent') return;
+  if (!voterId) return;
+
+  const consentVotes = { ...(currentLive.consentVotes || {}) };
+  consentVotes[voterId] = now;
+
+  return {
+    ...currentLive,
+    consentVotes,
+  };
+}
+
+/**
+ * After the sold-lot celebration, park the lot in the consent gate: all human
+ * managers must confirm (or the 30s deadline elapses / host forces) before
+ * the next player starts. Idempotent: re-opening is aborted if the lot has
+ * already advanced.
+ */
+export function transactOpenConsent(currentLive, {
+  currentPlayerId,
+  consentDeadline,
+}) {
+  if (!currentLive) return currentLive;
+  if (currentLive.playerId !== currentPlayerId) return;
+  if (currentLive.status !== 'sold') return;
+
+  return {
+    ...currentLive,
+    status: 'awaiting_consent',
+    consentVotes: {},
+    consentDeadline,
+    timerEndsAt: consentDeadline,
+  };
+}
+
+export function transactTeamSaleRevert(currentTeam, {
+  playerId,
+  initialBudget = 120,
+}) {
+  if (!currentTeam) return currentTeam;
+  const currentSquad = normalizeSquad(currentTeam.squad);
+  if (!playerId || !currentSquad.some((entry) => (typeof entry === 'string' ? entry : entry?.id) === playerId)) {
+    return currentTeam;
+  }
+
+  // Removing the player recomputes the whole purse from the remaining squad,
+  // so the refund is exact (no float drift from subtracting the last bid).
+  const squad = currentSquad.filter((entry) => (typeof entry === 'string' ? entry : entry?.id) !== playerId);
+  const spent = squad.reduce(
+    (sum, entry) => r2(sum + toFiniteNumber(typeof entry === 'object' ? entry.bid : 0, 0)),
+    0,
+  );
+
+  return {
+    ...currentTeam,
+    squad,
+    spent,
+    budgetRemaining: Math.max(0, r2(toFiniteNumber(initialBudget, 120) - spent)),
+  };
+}
+
+export function transactRoomPlayersSaleRevert(currentRoom, {
+  winnerId,
+  bid,
+}) {
+  if (!currentRoom?.players) return currentRoom;
+  return {
+    ...currentRoom,
+    players: mapRoomPlayers(currentRoom.players, (player) => (
+      player.id === winnerId
+        ? {
+            ...player,
+            spent: Math.max(0, r2(toFiniteNumber(player.spent, 0) - toFiniteNumber(bid, 0))),
+            squadCount: Math.max(0, toFiniteNumber(player.squadCount, 0) - 1),
+          }
+        : player
+    )),
+  };
+}
+
+/**
+ * Host "get the player back": undo a just-sold lot and reopen it for re-bid.
+ * Reverting the winner's squad/purse is done separately via the team/room
+ * reversal transactions.
+ *
+ * The lot resumes *from* the last winning bid: the bid amount and the team
+ * that placed it are restored rather than reset to ₹0, so the re-auction can
+ * only move up (the restored high bidder simply keeps the lot until someone
+ * outbids). The consent-gate bookkeeping is cleared so the lot is back in a
+ * clean bidding state.
+ */
+export function transactReopen(currentLive, {
+  currentPlayerId,
+  timerEndsAt,
+}) {
+  if (!currentLive) return currentLive;
+  if (currentLive.playerId !== currentPlayerId) return;
+  if (
+    currentLive.status !== 'awaiting_consent' &&
+    currentLive.status !== 'sold'
+  ) {
+    return;
+  }
+
+  return {
+    ...currentLive,            // ← preserves currentBid, highBidderId, highBidderName, highBidderTeamId
+    status: 'bidding',
+    timerEndsAt,
+    passes: null,
+    consentVotes: null,
+    consentDeadline: null,
+    celebrationEndsAt: null,
   };
 }

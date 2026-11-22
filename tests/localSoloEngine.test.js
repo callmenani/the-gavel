@@ -14,6 +14,7 @@ import {
   STORAGE_INDEX_KEY,
 } from '../src/lib/localAuctionEngine.js';
 import { IPL_PLAYERS } from '../src/data/players.js';
+import { r2 } from '../src/lib/auctionDisplay.js';
 import {
   enterLocalMode,
   exitLocalMode,
@@ -533,4 +534,145 @@ test('localAuctionReducer: PLACE_BID handles quick jump bids (targetBid)', () =>
     now: 3000,
   });
   assert.equal(state.currentAuction.currentBid, beforeStale);
+});
+
+// ─── Consent-after-sale gate ──────────────────────────────────────────────
+test('consent gate: OPEN_CONSENT parks a sold lot; CONSENT_VOTE advances when everyone consents', () => {
+  const human = { uid: 'human_1', displayName: 'Captain', team: 'CSK' };
+  let state = localAuctionReducer(null, {
+    type: 'INIT_AUCTION',
+    roomId: 'SOLO-CONSENT',
+    humanUser: human,
+    auctionType: 'sprint5',
+    seed: 42,
+    now: 1000,
+  });
+
+  state = localAuctionReducer(state, { type: 'PLACE_BID', bidderId: 'human_1', now: 2000 });
+  state = localAuctionReducer(state, { type: 'RESOLVE_LOT', now: 12000, celebrate: true, celebrationMs: 3000 });
+  assert.equal(state.currentAuction.status, 'sold');
+
+  // Open the gate after the celebration
+  state = localAuctionReducer(state, { type: 'OPEN_CONSENT', now: 15000 });
+  assert.equal(state.currentAuction.status, 'awaiting_consent');
+  assert.ok(state.currentAuction.consentDeadline >= 15000 + 30000);
+  assert.equal(state.currentPlayerIndex, 0); // lot stays parked, not advanced
+
+  // Reopening a consent gate on an already-gated lot is a no-op
+  const dup = localAuctionReducer(state, { type: 'OPEN_CONSENT', now: 15500 });
+  assert.equal(dup.currentAuction.status, 'awaiting_consent');
+
+  // Human host confirms -> everyone (only humans block in solo) consented ->
+  // the next lot starts automatically.
+  state = localAuctionReducer(state, { type: 'CONSENT_VOTE', voterId: 'human_1', now: 16000 });
+  assert.equal(state.currentAuction.status, 'bidding');
+  assert.equal(state.currentPlayerIndex, 1);
+});
+
+test('consent gate: CONSENT_TICK staggers bot confirmations and enforces the 30s safety deadline', () => {
+  const human = { uid: 'human_1', displayName: 'Captain', team: 'RCB' };
+  let state = localAuctionReducer(null, {
+    type: 'INIT_AUCTION',
+    roomId: 'SOLO-CONSENT-TICK',
+    humanUser: human,
+    auctionType: 'sprint5',
+    seed: 99,
+    now: 1000,
+  });
+
+  state = localAuctionReducer(state, { type: 'PLACE_BID', bidderId: 'bot_MI', now: 2000 });
+  state = localAuctionReducer(state, { type: 'RESOLVE_LOT', now: 12000, celebrate: true, celebrationMs: 3000 });
+  state = localAuctionReducer(state, { type: 'OPEN_CONSENT', now: 15000 });
+
+  // Ticks while waiting do NOT advance the lot (host hasn't consented).
+  // NOTE: bidder must be a real bot team — human_1 manages RCB, so bot_RCB
+  // does not exist (the other 9 franchises each have a bot).
+  const before = localAuctionReducer(state, { type: 'CONSENT_TICK', now: 16000, rngSeed: 42 });
+  assert.equal(before.currentAuction.status, 'awaiting_consent');
+
+  // Past the consent deadline, the tick auto-advances (safety net)
+  const deadlineState = { ...before, currentAuction: { ...before.currentAuction, consentDeadline: 16500 }, currentLot: { ...before.currentLot, consentDeadline: 16500 } };
+  const after = localAuctionReducer(deadlineState, { type: 'CONSENT_TICK', now: 16500 });
+  assert.equal(after.currentAuction.status, 'bidding');
+  assert.equal(after.currentPlayerIndex, 1);
+});
+
+test('consent gate: CONSENT_FORCE advances immediately without any consent', () => {
+  const human = { uid: 'human_1', displayName: 'Captain', team: 'KKR' };
+  let state = localAuctionReducer(null, {
+    type: 'INIT_AUCTION',
+    roomId: 'SOLO-CONSENT-FORCE',
+    humanUser: human,
+    auctionType: 'sprint5',
+    seed: 5,
+    now: 1000,
+  });
+
+  state = localAuctionReducer(state, { type: 'PLACE_BID', bidderId: 'bot_CSK', now: 2000 });
+  state = localAuctionReducer(state, { type: 'RESOLVE_LOT', now: 12000, celebrate: true, celebrationMs: 3000 });
+  state = localAuctionReducer(state, { type: 'OPEN_CONSENT', now: 15000 });
+
+  // Nobody consented yet
+  assert.equal(state.currentAuction.consentVotes?.human_1, undefined);
+  state = localAuctionReducer(state, { type: 'CONSENT_FORCE', now: 15500 });
+
+  assert.equal(state.currentAuction.status, 'bidding');
+  assert.equal(state.currentPlayerIndex, 1);
+});
+
+test('consent gate: REOPEN_LOT undoes the sale (refund + free slot) and resumes bidding from the last bid + team', () => {
+  const human = { uid: 'human_1', displayName: 'Captain', team: 'CSK' };
+  let state = localAuctionReducer(null, {
+    type: 'INIT_AUCTION',
+    roomId: 'SOLO-CONSENT-REOPEN',
+    humanUser: human,
+    auctionType: 'sprint5',
+    seed: 42,
+    now: 1000,
+  });
+
+  state = localAuctionReducer(state, { type: 'PLACE_BID', bidderId: 'human_1', now: 2000 });
+  const soldPrice = state.currentAuction.currentBid;
+  const soldTeamId = state.currentAuction.highBidderTeamId;
+  state = localAuctionReducer(state, { type: 'RESOLVE_LOT', now: 12000, celebrate: true, celebrationMs: 3000 });
+  state = localAuctionReducer(state, { type: 'OPEN_CONSENT', now: 15000 });
+
+  const buyer = state.roomTeams.find((t) => t.userId === 'human_1');
+  const spentAtSale = buyer.spent;
+  const squadAtSale = buyer.squad.length;
+  assert.ok(squadAtSale >= 1);
+
+  state = localAuctionReducer(state, { type: 'REOPEN_LOT', now: 16000 });
+
+  // Back in bidding on the same player, resuming from the last winning bid + team
+  assert.equal(state.currentAuction.status, 'bidding');
+  assert.equal(state.currentAuction.currentBid, soldPrice);       // ← changed: was 0
+  assert.equal(state.currentAuction.highBidderId, 'human_1');     // ← new assertion
+  assert.equal(state.currentAuction.highBidderTeamId, soldTeamId); // ← new assertion
+  assert.equal(state.currentPlayerIndex, 0);
+
+  // The buyer's purse is refunded and the squad slot is freed
+  const buyerAfter = state.roomTeams.find((t) => t.userId === 'human_1');
+  assert.equal(buyerAfter.spent, r2(spentAtSale - soldPrice));
+  assert.equal(buyerAfter.squad.length, squadAtSale - 1);
+  assert.equal(buyerAfter.budgetRemaining, buyerAfter.budgetRemaining > 0 ? buyerAfter.budgetRemaining : 0);
+});
+
+test('consent gate: unsold lots do NOT open the gate (OPEN_CONSENT is a no-op)', () => {
+  const human = { uid: 'human_1', displayName: 'Captain', team: 'GT' };
+  let state = localAuctionReducer(null, {
+    type: 'INIT_AUCTION',
+    roomId: 'SOLO-CONSENT-UNSOLD',
+    humanUser: human,
+    auctionType: 'sprint5',
+    seed: 42,
+    now: 1000,
+  });
+
+  // No bids -> unsold
+  state = localAuctionReducer(state, { type: 'RESOLVE_LOT', now: 12000, celebrate: true, celebrationMs: 2000 });
+  assert.equal(state.currentAuction.status, 'unsold');
+
+  const unchanged = localAuctionReducer(state, { type: 'OPEN_CONSENT', now: 14000 });
+  assert.equal(unchanged.currentAuction.status, 'unsold');
 });

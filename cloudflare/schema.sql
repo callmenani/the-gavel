@@ -1,4 +1,4 @@
--- Cloudflare D1 SQLite Schema for CrickAuction
+-- Cloudflare D1 SQLite Schema for TheGavel
 -- Replaces Supabase PostgreSQL tables: auctions, teams
 
 CREATE TABLE IF NOT EXISTS auctions (
@@ -49,5 +49,8 @@ CREATE TABLE IF NOT EXISTS platform_stats (
   active_count INTEGER DEFAULT 0,
   updated_at INTEGER
 );
+
+INSERT OR IGNORE INTO platform_stats (id, total_count, active_count, updated_at)
+VALUES ('global', 0, 0, (strftime('%s', 'now') * 1000));
 
 

@@ -61,7 +61,7 @@ test('simulateBotLot: with 0 bots always yields unsold', () => {
   assert.equal(result.finalBid, 0);
 });
 
-test('simulateRemainingAuction: preserves human squad while drafting for bots', () => {
+test('simulateRemainingAuction: awards live lot to human when leading, all teams bid remaining', () => {
   const humanTeam = {
     userId: 'user_shaurya',
     teamId: 'CSK',
@@ -79,7 +79,7 @@ test('simulateRemainingAuction: preserves human squad while drafting for bots', 
     playerId: IPL_PLAYERS[0].id,
     currentBid: 5.0,
     highBidderId: 'user_shaurya',
-    highBidderName: 'Shaurya',
+    highBidderName: 'Manager1',
     highBidderTeamId: 'CSK',
     status: 'bidding',
   };
@@ -98,10 +98,10 @@ test('simulateRemainingAuction: preserves human squad while drafting for bots', 
 
   assert.equal(fastForwarded, true);
   const updatedHuman = simulatedTeams.find((t) => t.userId === 'user_shaurya');
-  // Human should have the initial player + the live lot awarded!
-  assert.equal(updatedHuman.squad.length, 2);
-  assert.equal(updatedHuman.squad[1].id, IPL_PLAYERS[0].id);
-  assert.equal(updatedHuman.spent, 20); // 15 + 5
+  // Human keeps existing picks, wins the live lot, and can win more from simulated remaining lots
+  assert.ok(updatedHuman.squad.length >= 2);
+  assert.ok(updatedHuman.squad.some((p) => p.id === IPL_PLAYERS[0].id));
+  assert.ok(updatedHuman.spent >= 20);
 
   // Verify none of the bot teams exceeded squadLimit or budget
   for (const t of simulatedTeams) {
@@ -110,7 +110,7 @@ test('simulateRemainingAuction: preserves human squad while drafting for bots', 
   }
 });
 
-test('extra requirements: no team over purse/squad/overseas, each player resolved once, human squad unchanged, idempotent', () => {
+test('extra requirements: no team over purse/squad/overseas, each player resolved once, human can draft on fast-forward, idempotent', () => {
   const humanTeam = {
     userId: 'user_human',
     teamId: 'CSK',
@@ -158,10 +158,11 @@ test('extra requirements: no team over purse/squad/overseas, each player resolve
   });
 
   const humanAfter = result1.simulatedTeams.find((t) => t.userId === 'user_human');
-  // Human was NOT high bidder on live lot, so human squad remains exactly the original 2 players
-  assert.equal(humanAfter.squad.length, 2);
-  assert.equal(humanAfter.spent, 18);
-  assert.equal(humanAfter.budgetRemaining, 102);
+  // Human was NOT high bidder on live lot, but still participates in simulated bidding for remaining lots
+  assert.ok(humanAfter.squad.length >= 2, 'Human squad should fill during fast-forward');
+  assert.ok(humanAfter.spent >= 18);
+  assert.ok(humanAfter.budgetRemaining <= 102);
+  assert.ok(humanAfter.spent <= 120);
 
   // Collect all sold players across all teams
   const allSoldPlayerIds = [];

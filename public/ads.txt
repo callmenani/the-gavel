@@ -1,1 +1,3 @@
-google.com, pub-2952599241278941, DIRECT, f08c47fec0942fa0
+# Ads are disabled by default in this build. To enable AdSense, add your own
+# publisher line here and set the VITE_ADSENSE_* env vars (see DEPLOY.md §5):
+# google.com, pub-YOUR_ADMAPS_PUB_ID, DIRECT, YOUR_CLIENT_ID

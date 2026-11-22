@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   CricketBall,
   CricketBat,
@@ -100,17 +100,19 @@ const renderItem = (item) => {
         transform: `${item.center ? 'translateX(-50%) ' : ''}rotate(${item.rotate || 0}deg)`,
       }}
     >
-      {/* Soft duplicate adds depth without a heavy glow. */}
-      <div className="absolute inset-0 scale-110 blur-[3px] opacity-35" aria-hidden="true">
-        {renderSvgByType(item, size)}
-      </div>
+      {/* Perf: the soft blurred duplicate (scale-110 + blur filter) doubled
+          every art node and forced a filter pass per layer — barely visible
+          on mobile, costly on iOS. Single crisp layer instead. */}
       <div className="relative">{renderSvgByType(item, size)}</div>
     </div>
   );
 };
 
 const PageBackground = ({ showArt = true }) => {
-  const [parallaxY, setParallaxY] = useState(0);
+  // Parallax writes transform directly to the art layer's ref, so scrolling
+  // triggers ZERO React re-renders of this tree (compositor-only update on
+  // iOS — the old setState-per-scroll-frame re-rendered every art node).
+  const artRef = useRef(null);
 
   useEffect(() => {
     if (
@@ -119,17 +121,19 @@ const PageBackground = ({ showArt = true }) => {
     ) {
       return;
     }
+    if (!artRef.current) return;
 
     let ticking = false;
     const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          const offset = Math.min(28, Math.max(0, window.scrollY * 0.035));
-          setParallaxY(offset);
-          ticking = false;
-        });
-        ticking = true;
-      }
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        const offset = Math.min(28, Math.max(0, window.scrollY * 0.035));
+        if (artRef.current) {
+          artRef.current.style.transform = `translate3d(0, ${offset}px, 0)`;
+        }
+        ticking = false;
+      });
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -146,16 +150,20 @@ const PageBackground = ({ showArt = true }) => {
         className="fixed inset-0 pointer-events-none -z-20"
         style={{
           background:
-            'linear-gradient(to bottom, var(--bg-gradient-top, #0a0b0e) 0%, #08090b 45%, var(--bg-gradient-bottom, #060607) 100%)',
+            'linear-gradient(to bottom, var(--bg-gradient-top, #0a0b0e) 0%, var(--bg-gradient-mid, #08090b) 45%, var(--bg-gradient-bottom, #060607) 100%)',
         }}
       />
 
-      {/* 2. Cool stadium light (neutral only, no warm tint) */}
+      {/* 2. Stadium floodlights: warm gold corner + cool blue corner +
+          faint pitch-green wash at the base — the IPL broadcast look. */}
       <div
         className="fixed inset-0 pointer-events-none -z-20"
         style={{
-          background:
-            'radial-gradient(ellipse 42% 35% at 84% 46%, rgba(56, 132, 255, 0.03) 0%, transparent 70%)',
+          background: [
+            'radial-gradient(ellipse 55% 40% at 88% 20%, rgba(212, 175, 55, 0.06) 0%, transparent 70%)',
+            'radial-gradient(ellipse 50% 42% at 12% 12%, rgba(56, 132, 255, 0.05) 0%, transparent 70%)',
+            'radial-gradient(ellipse 70% 24% at 50% 100%, rgba(38, 166, 92, 0.05) 0%, transparent 70%)',
+          ].join(', '),
         }}
       />
 
@@ -204,11 +212,9 @@ const PageBackground = ({ showArt = true }) => {
         }}
       >
         <div
-          className="relative w-full h-full will-change-transform"
-          style={{
-            transform: `translate3d(0, ${parallaxY}px, 0)`,
-            transition: 'transform 0.1s ease-out',
-          }}
+          ref={artRef}
+          className="relative w-full h-full"
+          style={{ willChange: 'transform' }}
         >
           {TOP_ITEMS.map(renderItem)}
         </div>

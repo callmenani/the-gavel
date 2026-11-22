@@ -28,7 +28,7 @@ export const r2 = (value) => {
 };
 
 /**
- * Canonical overseas rule for Crick Auction:
+ * Canonical overseas rule for TheGavel:
  * only the exact country code "IND" is Indian. Missing, empty, or any other
  * country value is overseas.
  */

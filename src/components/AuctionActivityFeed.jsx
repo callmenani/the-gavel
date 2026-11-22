@@ -45,15 +45,8 @@ const generateMockNotification = (existingIds = new Set()) => {
 };
 
 export default function AuctionActivityFeed({ activeCount = 0, stats = null }) {
-  const [notifications, setNotifications] = useState([]);
-
-  const liveRooms =
-    stats?.activeCount !== undefined && stats?.activeCount !== null
-      ? stats.activeCount
-      : (activeCount !== undefined && activeCount !== null ? activeCount : 0);
-
-  // Initialize with 8 historical notifications to fill the height
-  useEffect(() => {
+  // Seed 8 historical notifications so the feed has content from the first render.
+  const [notifications, setNotifications] = useState(() => {
     const initial = [];
     const usedIds = new Set();
     for (let i = 0; i < 8; i++) {
@@ -61,8 +54,13 @@ export default function AuctionActivityFeed({ activeCount = 0, stats = null }) {
       usedIds.add(mock.player.id);
       initial.push(mock);
     }
-    setNotifications(initial);
-  }, []);
+    return initial;
+  });
+
+  const liveRooms =
+    stats?.activeCount !== undefined && stats?.activeCount !== null
+      ? stats.activeCount
+      : (activeCount !== undefined && activeCount !== null ? activeCount : 0);
 
   // Dynamic timeout to push a new notification at variable intervals (2s to 10s)
   useEffect(() => {

@@ -10,4 +10,4 @@ Disallow: /summary/
 Disallow: /admin
 Disallow: /admin/
 
-Sitemap: https://crickauction.in/sitemap.xml
+Sitemap: https://thegavel.in/sitemap.xml

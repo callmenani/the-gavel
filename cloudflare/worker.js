@@ -1,5 +1,5 @@
 /**
- * Cloudflare Worker API for CrickAuction Directory & History
+ * Cloudflare Worker API for TheGavel Directory & History
  * Database: Cloudflare D1 (SQLite)
  */
 
@@ -9,8 +9,8 @@ function isAllowedOrigin(origin) {
     const { hostname } = new URL(origin);
     const host = hostname.toLowerCase();
     return (
-      host === 'crickauction.in' ||
-      host.endsWith('.crickauction.in') ||
+      host === 'thegavel.app' ||
+      host.endsWith('.thegavel.app') ||
       host === 'localhost' ||
       host === '127.0.0.1' ||
       host === '[::1]' ||
@@ -30,12 +30,21 @@ function isAllowedOrigin(origin) {
 function getCorsHeaders(origin) {
   const allowed = isAllowedOrigin(origin);
   return {
-    'Access-Control-Allow-Origin': allowed ? origin : 'https://crickauction.in',
+    'Access-Control-Allow-Origin': allowed ? origin : 'https://thegavel.app',
     'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CrickAuction-Client',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-TheGavel-Client',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   };
+}
+
+async function purgePublicRoomsCache(cache, origin) {
+  try {
+    const cacheUrl = new URL(`${origin}/api/public-rooms`);
+    await cache.delete(new Request(cacheUrl.toString(), { method: 'GET' }));
+  } catch {
+    /* best-effort */
+  }
 }
 
 function parseJsonField(val, fallback = null) {
@@ -96,7 +105,7 @@ function checkRateLimit(ip, category = 'read') {
 export default {
   async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin') || request.headers.get('Referer') || '';
-    const clientHeader = request.headers.get('X-CrickAuction-Client');
+    const clientHeader = request.headers.get('X-TheGavel-Client');
 
     const json = (data, status = 200, extraHeaders = {}) => {
       return new Response(JSON.stringify(data), {
@@ -126,7 +135,7 @@ export default {
 
     // Health check endpoint
     if (request.method === 'GET' && (path === '' || path === '/api' || path === '/health')) {
-      return json({ status: 'ok', service: 'crickauction-api', timestamp: Date.now() }, 200, {}, origin);
+      return json({ status: 'ok', service: 'the-gavel-api', timestamp: Date.now() }, 200, {}, origin);
     }
 
     // --- Security Checks ---
@@ -144,7 +153,7 @@ export default {
 
     // 2. Mutating Operations Protection: Require allowed origin or verified client header
     if (['POST', 'PATCH', 'DELETE'].includes(request.method)) {
-      const isAllowed = isAllowedOrigin(origin) || clientHeader === 'crickauction-web';
+      const isAllowed = isAllowedOrigin(origin) || clientHeader === 'the-gavel-web';
       if (!isAllowed) {
         return new Response(JSON.stringify({ error: 'Unauthorized request source' }), {
           status: 403,
@@ -188,15 +197,21 @@ export default {
         let cached = await cache.match(cacheKey);
         if (cached) return cached;
 
-        // Active waiting rooms created in the last 20 minutes with online admin/host
-        const twentyMinutesAgo = Date.now() - 20 * 60 * 1000;
+        // Public rooms still open for joins: waiting (host online) or live auction in progress.
+        const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
         const [roomsRes, statsRow] = await Promise.all([
           env.DB.prepare(
-            `SELECT id, server, auction_type, squad_limit, overseas_limit, settings, players, host_online, created_at 
+            `SELECT id, server, auction_type, status, squad_limit, overseas_limit, settings, players, host_online, created_at 
              FROM auctions 
-             WHERE is_public = 1 AND status = 'waiting' AND host_online = 1 AND created_at >= ? 
-             ORDER BY created_at DESC LIMIT 20`
-          ).bind(twentyMinutesAgo).all(),
+             WHERE is_public = 1 
+               AND status IN ('waiting', 'active', 'paused')
+               AND created_at >= ?
+               AND (
+                 status != 'waiting'
+                 OR host_online = 1
+               )
+             ORDER BY created_at DESC LIMIT 40`
+          ).bind(threeHoursAgo).all(),
           env.DB.prepare(
             `SELECT active_count FROM platform_stats WHERE id = 'global' LIMIT 1`
           ).first().catch(() => null),
@@ -205,11 +220,20 @@ export default {
         const formatted = (roomsRes.results || []).map((r) => {
           const players = parseJsonField(r.players, []);
           const settings = parseJsonField(r.settings, {});
+          const joinedSlots = Array.isArray(players)
+            ? players.filter(
+                (p) =>
+                  p &&
+                  !p.isAuctionManager &&
+                  (p.team || p.isBot || String(p.id || '').startsWith('bot_')),
+              ).length
+            : 1;
           return {
             id: r.id,
             server: r.server || 'server-1',
+            status: r.status || 'waiting',
             type: r.auction_type || 'mega',
-            playerCount: Array.isArray(players) ? players.length : 1,
+            playerCount: joinedSlots || 1,
             maxPlayers: 10,
             hostName: Array.isArray(players) && players[0] ? players[0].name : 'Host',
             hostOnline: r.host_online !== 0,
@@ -483,6 +507,7 @@ Respond ONLY with valid JSON in this exact structure without markdown:
           await insertAuctionStmt.run();
         }
 
+        ctx.waitUntil(purgePublicRoomsCache(caches.default, url.origin));
         return json({ success: true, id });
       }
 
@@ -540,6 +565,7 @@ Respond ONLY with valid JSON in this exact structure without markdown:
           await env.DB.batch(stmts);
         }
 
+        ctx.waitUntil(purgePublicRoomsCache(caches.default, url.origin));
         return json({ success: true, id });
       }
 

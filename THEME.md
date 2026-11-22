@@ -1,6 +1,6 @@
-# CrickAuction Design System & Theme Guidelines
+# TheGavel Design System & Theme Guidelines
 
-This document specifies the core design tokens, surfaces, cards, typography, shadows, borders, motion principles, and mobile responsiveness patterns established on the CrickAuction Landing Page. Use this guide across every page to ensure aesthetic consistency and fluid performance.
+This document specifies the core design tokens, surfaces, cards, typography, shadows, borders, motion principles, and mobile responsiveness patterns established on the TheGavel Landing Page. Use this guide across every page to ensure aesthetic consistency and fluid performance.
 
 ---
 
@@ -138,7 +138,7 @@ To guarantee zero stutter or jank across low-power and high-refresh screens:
 
 ## 7. Reusable Component Checklist
 
-When creating or modifying new pages in CrickAuction:
+When creating or modifying new pages in TheGavel:
 - [ ] Base background uses `#000000` / transparent with `<PageBackground />`.
 - [ ] No orange gradients or bright accent halos; use monochrome (`bg-white text-black`) or cool slate.
 - [ ] Modals and sheets use `#0c0c0c` with `border-white/10` and `backdrop-blur-md`.

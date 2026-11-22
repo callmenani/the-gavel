@@ -1,6 +1,6 @@
 <div align="center">
 
-  # Crick Auction
+  # TheGavel
   ### *The ultimate real-time SaaS auction, live multiplayer bidding, and AI squad evaluation engine.*
 
   [![React](https://img.shields.io/badge/React-19.2-20232A?style=flat-square&logo=react&logoColor=61DAFB)](https://reactjs.org/)
@@ -15,7 +15,11 @@
   Evaluate drafted squads with Groq-powered AI Scout Ratings (0–100) and format-specific tactical verdicts.<br />
   Sub-second bidding backed by a 7-server Firebase RTDB cluster and Cloudflare D1 edge database.
 
-  [Play Now](https://crickauction.in) • [Documentation](#documentation) • [Releases](#recent-feature-releases-november-2026) • [Contributing](#develop-and-contribute)
+  [Deploy guide](DEPLOY.md) • [Documentation](#documentation) • [Releases](#recent-feature-releases-november-2026) • [Contributing](#develop-and-contribute)
+
+  > **Zero-backend by default.** Solo auctions run 100% device-local with no setup. Multiplayer and the public
+  > lobby directory switch on automatically once you add Firebase + Cloudflare keys to your hosting env vars
+  > (see [DEPLOY.md](DEPLOY.md)). Includes a **light / dark theme toggle** in the navbar.
   <br />
   <br />
 </div>
@@ -24,11 +28,11 @@
   <img src="./readme-assets/auction_room.png" alt="Live Bidding Dashboard" width="100%">
 </p>
 
-## A Platform for Competitive Cricket Auctions
+## A Platform for Competitive T20 Auctions
 
 One host can run an auction room, but running a competitive multiplayer auction across 10 friends creates a complex synchronization challenge: synchronized bid countdowns, real-time purse calculations, overseas player quotas, squad limits, and sub-second latency.
 
-**Crick Auction** is built for that challenge. Create a private lobby with friends or play Solo against autonomous bots. For every player that comes under the hammer, universal clock-drift synchronization guarantees fair bidding across all devices.
+**TheGavel** is built for that challenge. Create a private lobby with friends or play Solo against autonomous bots. For every player that comes under the hammer, universal clock-drift synchronization guarantees fair bidding across all devices.
 
 ---
 
@@ -72,7 +76,7 @@ One host can run an auction room, but running a competitive multiplayer auction 
 ## How It Works
 
 ### 1. Public Directory & Edge Indexing
-When you open Crick Auction, the app queries the **Cloudflare D1 edge directory** to load active public lobbies and platform statistics instantly without burdening the live bidding cluster.
+When you open TheGavel, the app queries the **Cloudflare D1 edge directory** to load active public lobbies and platform statistics instantly without burdening the live bidding cluster.
 
 ### 2. Isolated Auction Nodes
 Creating a multiplayer room provisions an isolated node on the selected **Firebase RTDB** cluster. Creating a solo room spins up an entirely local, in-memory auction engine with zero server dependency.
@@ -92,7 +96,7 @@ When the auction completes, squad snapshots are persisted to **Cloudflare D1**. 
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/Shaurya01836/ipl-auction.git
+   git clone https://github.com/harshavardhan/the-gavel.git
    cd ipl-auction
    npm install
    ```
@@ -107,7 +111,7 @@ When the auction completes, squad snapshots are persisted to **Cloudflare D1**. 
    VITE_FIREBASE_PROJECT_ID=your_project_id
 
    # Cloudflare Directory API (D1 & Edge Worker)
-   VITE_DIRECTORY_API_URL=https://crickauction-api.crickauction.workers.dev
+   VITE_DIRECTORY_API_URL=https://the-gavel-directory.your-subdomain.workers.dev
    ```
 
 3. **Start local development server**
@@ -136,4 +140,4 @@ When the auction completes, squad snapshots are persisted to **Cloudflare D1**. 
 ---
 
 ## License
-Crick Auction is available under the [Apache License 2.0](LICENSE).
+TheGavel is available under the [Apache License 2.0](LICENSE).

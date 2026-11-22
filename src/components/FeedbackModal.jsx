@@ -61,7 +61,7 @@ const FeedbackModal = () => {
         createdAt: serverTimestamp(),
       });
       setSubmitted(true);
-    } catch (err) {
+    } catch {
       setError('Unable to send right now. Please try again later.');
     } finally {
       setIsSubmitting(false);
@@ -137,7 +137,7 @@ const FeedbackModal = () => {
                   Share Feedback
                 </h3>
                 <p className="text-[7.5px] font-black text-gray-500 uppercase tracking-widest mt-1">
-                  Help make CrickAuction better
+                  Help make TheGavel better
                 </p>
               </div>
 

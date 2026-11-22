@@ -353,10 +353,9 @@ test('lobby conversion ordering 4: Supabase delete and update both fail (best-ef
 });
 
 test('StrictMode double-mount creates at most one active bot loop', () => {
-  let tickCount = 0;
   const botLoop = createSoloBotLoop({
     getState: () => ({ status: 'active', currentLot: { status: 'bidding', timerEndsAt: Date.now() + 5000 } }),
-    updateState: () => { tickCount++; },
+    updateState: () => { /* no-op: liveness is asserted via isRunning() */ },
     intervalMs: 10,
   });
 
@@ -420,12 +419,64 @@ test('bot bids are driven strictly by timestamps (timerEndsAt and now)', () => {
   assert.deepEqual(actions[3], { type: 'RESOLVE_LOT', now: 10500 });
 });
 
-test('bot loop: handles celebration lifecycle (waits during celebration, advances after celebration ends)', () => {
+test('bot loop: sold-lot celebration ends -> opens the consent gate (no auto-advance)', () => {
   const actions = [];
   let state = {
     status: 'active',
     currentLot: {
       status: 'sold',
+      timerEndsAt: 13000,
+      celebrationEndsAt: 13000,
+    },
+  };
+
+  const botLoop = createSoloBotLoop({
+    getState: () => state,
+    updateState: (act) => {
+      actions.push(act);
+      if (act.type === 'OPEN_CONSENT') {
+        state = {
+          status: 'active',
+          currentLot: {
+            status: 'awaiting_consent',
+            consentVotes: {},
+            consentDeadline: 43000,
+          },
+        };
+      }
+      if (act.type === 'ADVANCE_LOT') {
+        state = {
+          status: 'active',
+          currentLot: { status: 'bidding', timerEndsAt: 23000 },
+        };
+      }
+    },
+  });
+
+  // During celebration -> CELEBRATING, no action
+  const res1 = botLoop.tick(11000);
+  assert.equal(res1, 'CELEBRATING');
+  assert.equal(actions.length, 0);
+
+  // When celebration finishes -> the SOLD lot opens the consent gate (it no
+  // longer auto-advances; it waits for manager consent / host override).
+  const res2 = botLoop.tick(13000);
+  assert.equal(res2, 'OPEN_CONSENT');
+  assert.deepEqual(actions[0], { type: 'OPEN_CONSENT', now: 13000 });
+
+  // While awaiting consent -> the bot loop drives CONSENT_TICK (staggered bot
+  // confirmations + 30s safety deadline), NOT a blind advance.
+  const res3 = botLoop.tick(14000);
+  assert.equal(res3, 'CONSENT_TICK');
+  assert.equal(actions[1].type, 'CONSENT_TICK');
+});
+
+test('bot loop: unsold-lot celebration ends -> still advances directly', () => {
+  const actions = [];
+  let state = {
+    status: 'active',
+    currentLot: {
+      status: 'unsold',
       timerEndsAt: 13000,
       celebrationEndsAt: 13000,
     },
@@ -444,14 +495,8 @@ test('bot loop: handles celebration lifecycle (waits during celebration, advance
     },
   });
 
-  // During celebration -> CELEBRATING, no action
-  const res1 = botLoop.tick(11000);
-  assert.equal(res1, 'CELEBRATING');
-  assert.equal(actions.length, 0);
-
-  // When celebration finishes -> ADVANCE_LOT
-  const res2 = botLoop.tick(13000);
-  assert.equal(res2, 'ADVANCE_LOT');
+  const res = botLoop.tick(13000);
+  assert.equal(res, 'ADVANCE_LOT');
   assert.deepEqual(actions[0], { type: 'ADVANCE_LOT', now: 13000 });
 });
 

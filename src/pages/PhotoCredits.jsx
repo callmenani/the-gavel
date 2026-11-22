@@ -6,7 +6,7 @@ import PageBackground from '../components/PageBackground';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 
 const PhotoCredits = () => {
-  useDocumentTitle('Photo Credits & Attribution | CrickAuction', 'Attribution, licensing, and fair use disclosures for cricketer portraits on CrickAuction.');
+  useDocumentTitle('Photo Credits & Attribution | TheGavel', 'Attribution, licensing, and fair use disclosures for cricketer portraits on TheGavel.');
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -127,7 +127,7 @@ const PhotoCredits = () => {
               Player Photo Credits & Attribution
             </h1>
             <p className="text-sm text-gray-400 leading-relaxed">
-              Disclosures regarding image licensing, source attribution, and fair use identification of cricketers on the CrickAuction platform.
+              Disclosures regarding image licensing, source attribution, and fair use identification of cricketers on the TheGavel platform.
             </p>
           </div>
 
@@ -138,10 +138,10 @@ const PhotoCredits = () => {
                 <span className="text-slate-400 font-pixel">1.</span> Fan-Made Independent Project
               </h2>
               <p>
-                <strong>CrickAuction</strong> (accessible at <code className="bg-white/10 px-1 py-0.5 rounded text-white text-xs">crickauction.in</code>) is an independent, non-commercial, fan-made cricket auction strategy simulator.
+                <strong>TheGavel</strong> (accessible at <code className="bg-white/10 px-1 py-0.5 rounded text-white text-xs">thegavel.in</code>) is an independent, non-commercial, fan-made cricket auction strategy simulator.
               </p>
               <p>
-                CrickAuction is <strong>not affiliated with, associated with, authorized by, sponsored by, or endorsed by</strong> the Board of Control for Cricket in India (BCCI), the Indian Premier League (IPL), the International Cricket Council (ICC), or any official franchise, team owner, or tournament organizer.
+                TheGavel is <strong>not affiliated with, associated with, authorized by, sponsored by, or endorsed by</strong> the Board of Control for Cricket in India (BCCI), the Indian Premier League (IPL), the International Cricket Council (ICC), or any official franchise, team owner, or tournament organizer.
               </p>
             </section>
 
@@ -196,7 +196,7 @@ const PhotoCredits = () => {
                 <span className="text-slate-400 font-pixel">5.</span> Dynamic Client-Side Initials Fallback
               </h2>
               <p>
-                To prevent mismatched, unauthorized, or inaccurate photos, CrickAuction does not use unverified automated web scrapers.
+                To prevent mismatched, unauthorized, or inaccurate photos, TheGavel does not use unverified automated web scrapers.
               </p>
               <p>
                 If a photograph is unavailable, encounters a network error, or has been removed, the platform renders a clean, local vector badge displaying the cricketer&apos;s initials. This fallback executes purely in the browser with zero external server dependencies.
@@ -210,13 +210,13 @@ const PhotoCredits = () => {
                 <span>6. Notice & Takedown Procedure</span>
               </h2>
               <p className="text-sm">
-                CrickAuction takes intellectual property rights seriously and operates in full compliance with applicable notice-and-takedown guidelines.
+                TheGavel takes intellectual property rights seriously and operates in full compliance with applicable notice-and-takedown guidelines.
               </p>
               <p className="text-sm">
-                If you are a photographer, creator, agency, or player representative and believe that any portrait used on CrickAuction infringes your copyright or requires updated attribution, please contact us with:
+                If you are a photographer, creator, agency, or player representative and believe that any portrait used on TheGavel infringes your copyright or requires updated attribution, please contact us with:
               </p>
               <ol className="list-decimal pl-5 space-y-1 text-sm text-gray-400">
-                <li>The name of the cricketer and URL where the image appears on CrickAuction.</li>
+                <li>The name of the cricketer and URL where the image appears on TheGavel.</li>
                 <li>Proof of copyright ownership or authorized representation.</li>
                 <li>Your preferred action: updated credit line, replacement with an alternate image, or complete removal.</li>
               </ol>

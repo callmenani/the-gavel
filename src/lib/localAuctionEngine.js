@@ -1,15 +1,15 @@
 import { IPL_PLAYERS } from '../data/players.js';
 import { TEAMS } from '../data/teams.js';
 import { toFiniteNumber, countOverseas, isOverseasPlayer, r2 } from './auctionDisplay.js';
-import { getNextBidAmount, generatePlayerOrder } from './auctionRules.js';
+import { getNextBidAmount, generatePlayerOrder, CONSENT_DEADLINE_MS } from './auctionRules.js';
 import { evaluateBotBid } from './botEngine.js';
 import { simulateBotLot, simulateRemainingAuction } from './botSimulation.js';
 
 export const SCHEMA_VERSION = 1;
 export const MAX_SOLO_SAVES = 5;
-export const STORAGE_PREFIX = 'crickauction_solo_';
-export const STORAGE_INDEX_KEY = 'crickauction_solo_index';
-export const STORAGE_LOCK_PREFIX = 'crickauction_solo_lock_';
+export const STORAGE_PREFIX = 'thegavel_solo_';
+export const STORAGE_INDEX_KEY = 'thegavel_solo_index';
+export const STORAGE_LOCK_PREFIX = 'thegavel_solo_lock_';
 
 /**
  * Unified detector for local-mode solo auction rooms.
@@ -56,6 +56,19 @@ export function createSeededRng(seed = 123456789) {
     s = (Math.imul(1664525, s) + 1013904223) >>> 0;
     return s / 4294967296;
   };
+}
+
+/**
+ * Consent-after-sale: true once every non-bot (human) manager in the room has
+ * voted. In a solo room that's just the host, so the gate resolves as soon as
+ * the host taps Confirm (or the safety deadline / force-advance elapses).
+ */
+function allHumansConsented(state, consentVotes) {
+  const humans = (state.roomTeams || state.teams || []).filter(
+    (t) => t.userId && !String(t.userId).startsWith('bot_'),
+  );
+  if (humans.length === 0) return true;
+  return humans.every((t) => consentVotes[t.userId] !== undefined);
 }
 
 /**
@@ -685,11 +698,260 @@ export function localAuctionReducer(state, action) {
           ...state.messages.slice(-50),
           {
             id: `ff_${now}`,
-            text: 'Fast-Forward complete: Remaining lots were drafted by AI bots.',
+            text: 'Fast-Forward complete: Remaining lots were drafted for all franchises.',
             type: 'log',
             timestamp: now,
           },
         ],
+      };
+    }
+
+    // ── Consent-after-sale gate ────────────────────────────────────────────
+    // After a SOLD lot, the room pauses in `awaiting_consent` until every human
+    // manager confirms (bots auto-confirm on a short stagger) or a 30s safety
+    // deadline elapses. The host can force the advance or reopen the lot.
+    case 'OPEN_CONSENT': {
+      if (!state || state.status !== 'active') return state;
+      const live = state.currentAuction;
+      if (!live || live.status !== 'sold') return state; // only sold lots gate
+      const { now = Date.now() } = action;
+
+      // No auto-vote: every human manager (including the host) taps Confirm so
+      // the gate is always visible. Bots fill the tally in via CONSENT_TICK.
+      const consentLot = {
+        ...live,
+        status: 'awaiting_consent',
+        consentVotes: {},
+        consentDeadline: now + CONSENT_DEADLINE_MS,
+      };
+
+      return {
+        ...state,
+        currentAuction: consentLot,
+        currentLot: consentLot,
+        messages: [
+          ...state.messages.slice(-50),
+          {
+            id: `consent_open_${now}`,
+            text: 'Sold. Waiting for all managers to confirm the next player…',
+            type: 'consent',
+            timestamp: now,
+          },
+        ],
+      };
+    }
+
+    case 'CONSENT_VOTE': {
+      if (!state || state.status !== 'active') return state;
+      const live = state.currentAuction;
+      if (!live || live.status !== 'awaiting_consent') return state;
+      const { voterId, now = Date.now() } = action;
+      if (!voterId) return state;
+
+      const consentVotes = { ...(live.consentVotes || {}), [voterId]: now };
+
+      if (allHumansConsented(state, consentVotes)) {
+        return localAuctionReducer(
+          { ...state, currentAuction: { ...live, consentVotes }, currentLot: { ...live, consentVotes } },
+          { type: 'ADVANCE_LOT', now },
+        );
+      }
+
+      const consentLot = { ...live, consentVotes };
+      return { ...state, currentAuction: consentLot, currentLot: consentLot };
+    }
+
+    // Driven by the bot loop / timer: staggers in bot confirmations and enforces
+    // the safety deadline so a stuck or lagging manager can never freeze the room.
+    case 'CONSENT_TICK': {
+      if (!state || state.status !== 'active') return state;
+      const live = state.currentAuction;
+      if (!live || live.status !== 'awaiting_consent') return state;
+      const { now = Date.now(), rngSeed } = action;
+
+      const consentVotes = { ...(live.consentVotes || {}) };
+      let changed = false;
+
+      if (typeof rngSeed === 'number' && Number.isFinite(rngSeed)) {
+        const rng = createSeededRng(rngSeed);
+        const bots = (state.roomTeams || state.teams || [])
+          .filter((t) => t.userId && String(t.userId).startsWith('bot_'));
+        for (const b of bots) {
+          if (consentVotes[b.userId] === undefined && rng() < 0.5) {
+            consentVotes[b.userId] = now;
+            changed = true;
+          }
+        }
+      }
+
+      const consentLot = { ...live, consentVotes };
+
+      if ((live.consentDeadline && now >= live.consentDeadline) || allHumansConsented(state, consentVotes)) {
+        return localAuctionReducer(
+          { ...state, currentAuction: consentLot, currentLot: consentLot },
+          { type: 'ADVANCE_LOT', now },
+        );
+      }
+
+      return changed ? { ...state, currentAuction: consentLot, currentLot: consentLot } : state;
+    }
+
+    // Host override: skip the consent wait and advance immediately.
+    case 'CONSENT_FORCE': {
+      if (!state || state.status !== 'active') return state;
+      const live = state.currentAuction;
+      if (!live || live.status !== 'awaiting_consent') return state;
+      const { now = Date.now() } = action;
+      const player = IPL_PLAYERS.find((p) => p.id === live.playerId);
+      const clearedLot = { ...live, consentVotes: null, consentDeadline: null };
+      return localAuctionReducer(
+        {
+          ...state,
+          currentAuction: clearedLot,
+          currentLot: clearedLot,
+          messages: [
+            ...state.messages.slice(-50),
+            {
+              id: `consent_force_${now}`,
+              text: `Host moved on to the next player (skipped the consent wait) after ${player?.name || 'the player'}.`,
+              type: 'consent',
+              timestamp: now,
+            },
+          ],
+        },
+        { type: 'ADVANCE_LOT', now },
+      );
+    }
+
+    // Host "get the player back": re-insert any player into the order right
+    // after the current position so they get re-bid on (solo rooms).
+    // Sold players are excluded — use REOPEN_LOT to undo a sale instead.
+    case 'RECALL_PLAYER': {
+      if (!state || state.status !== 'active') return state;
+      const live = state.currentAuction;
+      if (!live) return state;
+      const { playerIndex, now = Date.now() } = action;
+      const player = IPL_PLAYERS[playerIndex];
+      if (playerIndex == null || !player) return state;
+
+      // Block recall of already-sold players.
+      const soldIds = new Set(
+        (state.roomTeams || []).flatMap((t) => (t.squad || []).map((m) => m.id)),
+      );
+      if (soldIds.has(player.id)) return state;
+
+      const order = Array.isArray(state.playerOrder) ? state.playerOrder : [];
+      const cleaned = order.filter((i) => i !== playerIndex);
+      const curIdx = cleaned.findIndex((i) => {
+        const p = IPL_PLAYERS[i];
+        return p && p.id === live.playerId;
+      });
+      const insertAt = curIdx >= 0 ? curIdx + 1 : cleaned.length;
+      const newOrder = [...cleaned.slice(0, insertAt), playerIndex, ...cleaned.slice(insertAt)];
+
+      const timerSec = state.settings?.bidTimer || 10;
+      const isResolved = live.status === 'sold' || live.status === 'unsold' || live.status === 'awaiting_consent';
+      let nextIndex = curIdx;
+      let nextLot = live;
+      if (isResolved) {
+        nextIndex = insertAt; // start the recalled lot right now
+        nextLot = {
+          playerId: player.id,
+          currentBid: 0,
+          highBidderId: '',
+          highBidderName: '',
+          highBidderTeamId: '',
+          timerEndsAt: now + timerSec * 1000,
+          status: 'bidding',
+          pausedRemainingMs: null,
+          consentVotes: null,
+          consentDeadline: null,
+        };
+      }
+
+      return {
+        ...state,
+        playerOrder: newOrder,
+        currentPlayerIndex: nextIndex,
+        currentAuction: nextLot,
+        currentLot: nextLot,
+        messages: [
+          ...state.messages.slice(-50),
+          {
+            id: `recall_${player.id}_${now}`,
+            text: `Host pulled ${player.name} back into the auction.`,
+            type: 'log',
+            timestamp: now,
+          },
+        ],
+      };
+    }
+
+    // Host undo: pull the just-sold player back and reopen it for re-bid.
+    // Reverses the sale (refunds the buyer, frees the squad slot) so a lagging
+    // manager can still compete. The lot resumes *from* the last winning bid:
+    // the bid amount and the team that placed it are restored rather than
+    // reset to ₹0, so the re-auction can only move up.
+    case 'REOPEN_LOT': {
+      if (!state || state.status !== 'active') return state;
+      const live = state.currentAuction;
+      if (!live || live.status !== 'awaiting_consent') return state;
+      const { now = Date.now() } = action;
+      const player = IPL_PLAYERS.find((p) => p.id === live.playerId);
+      if (!player) return state;
+
+      const buyerId = live.highBidderId;
+      const winBid = toFiniteNumber(live.currentBid, 0);
+
+      const updatedRoomTeams = state.roomTeams.map((t) => {
+        if (t.userId !== buyerId) return t;
+        return {
+          ...t,
+          squad: (t.squad || []).filter((s) => s.id !== player.id),
+          spent: Math.max(0, toFiniteNumber(t.spent, 0) - winBid),
+          budgetRemaining: toFiniteNumber(t.budgetRemaining, state.settings?.budget || 120) + winBid,
+        };
+      });
+
+      const updatedPlayers = state.players.map((p) => {
+        if (p.id !== buyerId) return p;
+        return {
+          ...p,
+          spent: Math.max(0, toFiniteNumber(p.spent, 0) - winBid),
+          squadCount: Math.max(0, toFiniteNumber(p.squadCount, 0) - 1),
+        };
+      });
+
+      const timerSec = state.settings?.bidTimer || 10;
+      // Preserve the sale's bid + high bidder so the re-auction resumes from
+      // where it stood (the restored buyer holds the lot until outbid).
+      const reopenedLot = {
+        ...live,                    // ← preserves currentBid, highBidderId, highBidderName, highBidderTeamId
+        timerEndsAt: now + timerSec * 1000,
+        status: 'bidding',
+        pausedRemainingMs: null,
+        consentVotes: null,
+        consentDeadline: null,
+        celebrationEndsAt: null,
+      };
+
+
+      return {
+        ...state,
+        roomTeams: updatedRoomTeams,
+        teams: updatedRoomTeams,
+        players: updatedPlayers,
+        messages: [
+          ...state.messages.slice(-50),
+          {
+            id: `reopen_${now}`,
+            text: `${player.name} pulled back — re-bid resumes from the last winning bid.`,
+            type: 'consent',
+            timestamp: now,
+          },
+        ],
+        currentAuction: reopenedLot,
+        currentLot: reopenedLot,
       };
     }
 
@@ -955,7 +1217,7 @@ export async function acquireSoloRoomLock(roomId, tabId = Math.random().toString
   let channel = null;
   if (typeof BroadcastChannel !== 'undefined') {
     try {
-      channel = new BroadcastChannel(`crickauction_solo_tab_${roomId}`);
+      channel = new BroadcastChannel(`thegavel_solo_tab_${roomId}`);
       channel.onmessage = (e) => {
         if (e.data?.type === 'takeover' && e.data?.tabId !== tabId) {
           if (onSteal) onSteal();
@@ -966,18 +1228,10 @@ export async function acquireSoloRoomLock(roomId, tabId = Math.random().toString
     }
   }
 
-  const broadcastTakeover = () => {
-    try {
-      channel?.postMessage({ type: 'takeover', tabId });
-    } catch {
-      // Ignore
-    }
-  };
-
   if (typeof navigator !== 'undefined' && navigator.locks?.request) {
     try {
       let releaseLock = null;
-      const lockName = `crickauction_lock_${roomId}`;
+      const lockName = `thegavel_lock_${roomId}`;
 
       return await new Promise((resolve) => {
         navigator.locks.request(lockName, { ifAvailable: true }, async (lock) => {
@@ -987,13 +1241,13 @@ export async function acquireSoloRoomLock(roomId, tabId = Math.random().toString
               acquired: false,
               steal: async () => {
                 try {
-                  const ch = new BroadcastChannel(`crickauction_solo_tab_${roomId}`);
+                  const ch = new BroadcastChannel(`thegavel_solo_tab_${roomId}`);
                   ch.postMessage({ type: 'takeover', tabId });
                   ch.close();
                 } catch {}
                 return await new Promise((resSteal) => {
                   navigator.locks.request(lockName, { steal: true }, async (stolenLock) => {
-                    const stolenCh = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(`crickauction_solo_tab_${roomId}`) : null;
+                    const stolenCh = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(`thegavel_solo_tab_${roomId}`) : null;
                     if (stolenCh && onSteal) {
                       stolenCh.onmessage = (e) => {
                         if (e.data?.type === 'takeover' && e.data?.tabId !== tabId) onSteal();
@@ -1065,7 +1319,7 @@ export async function acquireSoloRoomLock(roomId, tabId = Math.random().toString
           acquired: false,
           steal: async () => {
             try {
-              const ch = new BroadcastChannel(`crickauction_solo_tab_${roomId}`);
+              const ch = new BroadcastChannel(`thegavel_solo_tab_${roomId}`);
               ch.postMessage({ type: 'takeover', tabId });
               ch.close();
             } catch {}

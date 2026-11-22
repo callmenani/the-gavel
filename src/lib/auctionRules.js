@@ -63,6 +63,9 @@ export function mapRoomPlayers(players, mapper) {
 
 export const MIN_TEAMS_TO_START = 2;
 
+/** Max human/bot franchises in a live room (auction manager is not a franchise). */
+export const MAX_FRANCHISE_SLOTS = 10;
+
 /** Distinct franchises in the room. Human and bot managers both carry `team`. */
 export function countAuctionTeams(players) {
   return new Set(mapRoomPlayers(players, (player) => player.team).filter(Boolean)).size;
@@ -152,6 +155,14 @@ export function finalizedLotRecoveryDelay(status) {
   if (status === 'unsold') return 3000;
   return null;
 }
+
+/**
+ * Consent-after-sale safety window: after a SOLD lot, the room pauses here
+ * for every manager to confirm the next player. If consent drags, the room
+ * auto-advances so one offline manager can never freeze the auction.
+ * Shared by the local solo engine and the cloud (RTDB) flow.
+ */
+export const CONSENT_DEADLINE_MS = 30000;
 
 /**
  * Decision predicate for server-side host-disconnect auto-pause.

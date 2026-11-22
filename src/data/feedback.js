@@ -100,11 +100,11 @@ export const RATINGS_V2_CONFIG = {
 };
 
 export const DEV_NOTE_CONFIG = {
-  name: 'Shaurya',
+  name: 'Harshavardhan',
   role: 'Creator & Developer',
-  avatarUrl: 'https://github.com/Shaurya01836.png',
+  avatarUrl: 'https://github.com/harshavardhan.png',
   heading: 'NOTE FROM THE DEV',
-  copy: "Hey, I'm Shaurya, a B.Tech student building CrickAuction between classes. It runs on a student budget (free tiers), so yes, sometimes it lags. I read every piece of feedback, even the angry ones, and I'm fixing things one by one. Thanks for sticking around.",
+  copy: "Hey, I'm Harshavardhan, building building TheGavel between classes. It runs on a student budget (free tiers), so yes, sometimes it lags. I read every piece of feedback, even the angry ones, and I'm fixing things one by one. Thanks for sticking around.",
   chips: [
     'Free-tier hosting',
     'Solo dev',

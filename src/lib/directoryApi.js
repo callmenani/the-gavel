@@ -11,7 +11,22 @@ const rawEnv =
     ? process.env
     : {};
 
-const API_BASE_URL = (rawEnv.VITE_DIRECTORY_API_URL || '').replace(/\/+$/, '');
+/** Cloudflare Worker base URL, or empty string for same-origin `/api` (Vite proxy / Pages). */
+export function resolveDirectoryApiBase() {
+  const fromEnv = (rawEnv.VITE_DIRECTORY_API_URL || '').replace(/\/+$/, '');
+  if (fromEnv) return fromEnv;
+  if (typeof window !== 'undefined') return '';
+  return '';
+}
+
+/** True when `.env` sets the worker URL (required for local dev proxy + directory writes). */
+export function isDirectoryApiConfigured() {
+  return Boolean((rawEnv.VITE_DIRECTORY_API_URL || '').trim());
+}
+
+function getApiBaseUrl() {
+  return resolveDirectoryApiBase();
+}
 
 // ─── Multi-Tier Storage Cache Helpers ───
 function readStorageCache(storage, key, ttlMs) {
@@ -42,7 +57,7 @@ function removeStorageCache(storage, key) {
 }
 
 async function request(endpoint, options = {}) {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = `${getApiBaseUrl()}${endpoint}`;
   const isGet = !options.method || options.method.toUpperCase() === 'GET';
 
   let response;
@@ -54,7 +69,7 @@ async function request(endpoint, options = {}) {
         ...(options.headers || {}),
       },
     });
-  } catch (netErr) {
+  } catch {
     const error = new Error('Network offline or directory service unavailable');
     error.status = 0;
     error.isNetwork = true;
@@ -85,15 +100,32 @@ async function request(endpoint, options = {}) {
 }
 
 const PUBLIC_ROOMS_TTL_MS = 20 * 1000; // 20s in-session cache
-const PUBLIC_ROOMS_KEY = 'crickauction_cache_public_rooms';
+export const PUBLIC_ROOMS_KEY = 'thegavel_cache_public_rooms';
+
+export function invalidatePublicRoomsCache() {
+  removeStorageCache(
+    typeof sessionStorage !== 'undefined' ? sessionStorage : null,
+    PUBLIC_ROOMS_KEY,
+  );
+  removeStorageCache(
+    typeof sessionStorage !== 'undefined' ? sessionStorage : null,
+    PLATFORM_STATS_KEY,
+  );
+}
 const PLATFORM_STATS_TTL_MS = 60 * 1000; // 60s in-session cache
-const PLATFORM_STATS_KEY = 'crickauction_cache_platform_stats';
+const PLATFORM_STATS_KEY = 'thegavel_cache_platform_stats';
 
 /**
  * Get live public rooms & active count in one flight.
  * Edge-cached on Cloudflare + 20s in sessionStorage.
  */
 export async function getPublicRooms(force = false) {
+  if (!isDirectoryApiConfigured() && typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+    console.warn(
+      '[directoryApi] VITE_DIRECTORY_API_URL is not set — public lobby list and room discovery are disabled locally. ' +
+        'Add the same worker URL as production to .env and restart the dev server.',
+    );
+  }
   if (!force) {
     const cached = readStorageCache(
       typeof sessionStorage !== 'undefined' ? sessionStorage : null,
@@ -171,7 +203,7 @@ const ROOM_RECORD_TTL_MS = 60 * 1000; // 60s in sessionStorage
 /** Read one auction directory row with 1-minute session cache */
 export async function fetchAuctionRecord(roomId) {
   if (!roomId) return null;
-  const key = `crickauction_cache_room_${roomId}`;
+  const key = `thegavel_cache_room_${roomId}`;
   const cached = readStorageCache(
     typeof sessionStorage !== 'undefined' ? sessionStorage : null,
     key,
@@ -241,8 +273,9 @@ export async function updateAuctionRecord(roomId, updates) {
     // Invalidate room cache on local update
     removeStorageCache(
       typeof sessionStorage !== 'undefined' ? sessionStorage : null,
-      `crickauction_cache_room_${roomId}`,
+      `thegavel_cache_room_${roomId}`,
     );
+    invalidatePublicRoomsCache();
     return { data: res, error: null };
   } catch (err) {
     console.warn('[directoryApi] Failed to update auction', err);
@@ -259,7 +292,7 @@ export async function deleteAuctionRecord(roomId) {
     });
     removeStorageCache(
       typeof sessionStorage !== 'undefined' ? sessionStorage : null,
-      `crickauction_cache_room_${roomId}`,
+      `thegavel_cache_room_${roomId}`,
     );
     removeStorageCache(
       typeof sessionStorage !== 'undefined' ? sessionStorage : null,
@@ -291,7 +324,7 @@ export async function flushTeamsData(teams) {
 /** Fetch teams for an auction with 10-minute session cache */
 export async function fetchTeamsForAuction(auctionId) {
   if (!auctionId) return [];
-  const key = `crickauction_cache_teams_${auctionId}`;
+  const key = `thegavel_cache_teams_${auctionId}`;
   const cached = readStorageCache(
     typeof sessionStorage !== 'undefined' ? sessionStorage : null,
     key,
@@ -327,7 +360,7 @@ const HISTORY_TTL_MS = 3 * 60 * 1000; // 3 minutes in localStorage
 /** Fetch a user's recent auctions history with 3-minute persistent cache */
 export async function fetchUserHistory(userId) {
   if (!userId) return [];
-  const key = `crickauction_cache_history_${userId}`;
+  const key = `thegavel_cache_history_${userId}`;
   const cached = readStorageCache(
     typeof localStorage !== 'undefined' ? localStorage : null,
     key,
@@ -366,7 +399,7 @@ export async function deleteUserHistoryEntry(teamDocId, userId = null) {
     if (userId) {
       removeStorageCache(
         typeof localStorage !== 'undefined' ? localStorage : null,
-        `crickauction_cache_history_${userId}`,
+        `thegavel_cache_history_${userId}`,
       );
     }
     return { error: null };
@@ -416,7 +449,7 @@ export async function generateAuctionAiRating(auctionId, payload) {
       method: 'POST',
       body: JSON.stringify(payload),
       headers: {
-        'X-CrickAuction-Client': 'crickauction-web',
+        'X-TheGavel-Client': 'thegavel-web',
       },
     });
   } catch (err) {

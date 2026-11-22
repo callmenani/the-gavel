@@ -47,7 +47,7 @@ const FEEDBACKS_PER_PAGE = 8;
 const AUCTIONS_PER_PAGE = 8;
 
 // ─── Admin Dashboard Cache (5-minute TTL to reduce Firestore & Supabase load) ───
-const ADMIN_CACHE_KEY = 'crickauction_admin_cache';
+const ADMIN_CACHE_KEY = 'thegavel_admin_cache';
 const ADMIN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const getCachedAdminData = () => {
@@ -171,7 +171,7 @@ const getPlayerKeyStats = (player) => {
 };
 
 const AdminPanel = () => {
-  useDocumentTitle('Admin Control Hub | CrickAuction', 'Administrative management panel.', true);
+  useDocumentTitle('Admin Control Hub | TheGavel', 'Administrative management panel.', true);
   const navigate = useNavigate();
   const { user, loginWithGoogle, logout } = useAuth();
   const { handleFirebaseError } = useQuota();
@@ -647,7 +647,7 @@ const AdminPanel = () => {
             ADMIN PORTAL ACCESS
           </h2>
           <p className="text-xs sm:text-sm text-slate-400 font-normal leading-relaxed mb-6 sm:mb-8">
-            Authentication required to access the CrickAuction system management dashboard.
+            Authentication required to access the TheGavel system management dashboard.
           </p>
 
           <button

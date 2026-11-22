@@ -1,4 +1,4 @@
-name = "crickauction-api"
+name = "the-gavel-api"
 main = "worker.js"
 compatibility_date = "2024-11-01"
 
@@ -7,10 +7,11 @@ enabled = true
 invocation_logs = true
 persist = true
 
-# Bind Cloudflare D1 database
+# Bind Cloudflare D1 database (create in YOUR account: `wrangler d1 create the-gavel-db`)
 [[d1_databases]]
 binding = "DB"
-database_name = "crickauction-db"
-database_id = "4ca10b3a-3ca8-46dd-937d-bc9a13b39ac1"
+database_name = "the-gavel-db"
+# Replace with the uuid from `wrangler d1 create` or `wrangler d1 list` (not another account's id).
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
 
 

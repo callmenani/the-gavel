@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Minus, X } from 'lucide-react';
+import { FEATURE_ADS } from '../lib/appConfig';
 
-const DEFAULT_CLIENT_ID = 'ca-pub-2952599241278941';
+const DEFAULT_CLIENT_ID = '';
 const DEFAULT_LANDING_SLOT_1 = '6078587405';
 const DEFAULT_LANDING_SLOT_2 = '2911895830';
 const DEFAULT_LANDING_SLOT_3 = '2523068937';
@@ -89,7 +90,7 @@ export const AuctionRoomAd = ({
     } catch {}
   };
 
-  if (isDismissed || !slot || !clientId) {
+  if (!FEATURE_ADS || isDismissed || !slot || !clientId) {
     return null;
   }
 
@@ -177,7 +178,7 @@ const AdSlot = ({
       : [slot1, slot2, slot3]
   ).filter((s) => Boolean(s && clientId));
 
-  if (activeSlots.length === 0) {
+  if (!FEATURE_ADS || activeSlots.length === 0) {
     return null;
   }
 

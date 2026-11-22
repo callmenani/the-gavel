@@ -109,7 +109,7 @@ const SquadRating = ({ roomTeams = [], currentAuction, auctionId: propAuctionId,
     if (!force) {
       // 0. Check client-side localStorage cache (must have modern score)
       try {
-        const localCached = localStorage.getItem(`crickauction_ai_${auctionId}`);
+        const localCached = localStorage.getItem(`thegavel_ai_${auctionId}`);
         if (localCached) {
           const parsed = JSON.parse(localCached);
           if (parsed?.winner && parsed.winner.score !== undefined) {
@@ -127,7 +127,7 @@ const SquadRating = ({ roomTeams = [], currentAuction, auctionId: propAuctionId,
         const cachedRes = await getAuctionAiRating(auctionId);
         if (cachedRes?.analysis?.winner && cachedRes.analysis.winner.score !== undefined) {
           try {
-            localStorage.setItem(`crickauction_ai_${auctionId}`, JSON.stringify(cachedRes.analysis));
+            localStorage.setItem(`thegavel_ai_${auctionId}`, JSON.stringify(cachedRes.analysis));
           } catch {}
           setAiAnalysis(cachedRes.analysis);
         }
@@ -199,7 +199,7 @@ const SquadRating = ({ roomTeams = [], currentAuction, auctionId: propAuctionId,
           teams: disqualifiedTeams,
         };
         try {
-          localStorage.setItem(`crickauction_ai_${auctionId}`, JSON.stringify(allDisqualifiedAnalysis));
+          localStorage.setItem(`thegavel_ai_${auctionId}`, JSON.stringify(allDisqualifiedAnalysis));
         } catch {}
         setAiAnalysis(allDisqualifiedAnalysis);
         setAiLoading(false);
@@ -245,7 +245,7 @@ const SquadRating = ({ roomTeams = [], currentAuction, auctionId: propAuctionId,
       };
 
       try {
-        localStorage.setItem(`crickauction_ai_${auctionId}`, JSON.stringify(finalAnalysis));
+        localStorage.setItem(`thegavel_ai_${auctionId}`, JSON.stringify(finalAnalysis));
       } catch {}
       setAiAnalysis(finalAnalysis);
       if (remoteCooldown > 0) {

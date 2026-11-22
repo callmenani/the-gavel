@@ -18,8 +18,8 @@ import useDocumentTitle from '../hooks/useDocumentTitle';
 
 const AboutUs = () => {
   useDocumentTitle(
-    'About Us | CrickAuction — The Premier IPL Auction Simulator',
-    'Learn about CrickAuction, our platform mission, AI bot valuation engine, realtime architecture, and engineering standards.'
+    'About Us | TheGavel — The Premier IPL Auction Simulator',
+    'Learn about TheGavel, our platform mission, AI bot valuation engine, realtime architecture, and engineering standards.'
   );
 
   useEffect(() => {
@@ -116,11 +116,11 @@ const AboutUs = () => {
         <main className="flex-1 max-w-3xl w-full pb-20">
           <div className="mb-8 sm:mb-12 border-b border-white/10 pb-6 sm:pb-8">
             <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-4">
-              About CrickAuction
+              About TheGavel
             </h1>
             <p className="text-sm text-gray-500 mb-6">Last updated: October 2026 • Platform Philosophy</p>
             <p className="text-base text-[#E5E5E5] leading-relaxed">
-              CrickAuction is an advanced, real-time multiplayer cricket simulation platform crafted to recreate the strategic tension, purse management, and paddle battles of the official Indian Premier League (IPL) Mega Auction.
+              TheGavel is an advanced, real-time multiplayer cricket simulation platform crafted to recreate the strategic tension, purse management, and paddle battles of the official Indian Premier League (IPL) Mega Auction.
             </p>
           </div>
 
@@ -147,7 +147,7 @@ const AboutUs = () => {
             <section id="mission" className="scroll-mt-24">
               <h2 className="text-xl font-semibold text-white mb-2">1. Mission & Philosophy</h2>
               <p className="text-sm text-gray-400 mb-6 leading-relaxed">
-                Why we built CrickAuction and how it bridges the gap between passive cricket viewing and tactical roster construction.
+                Why we built TheGavel and how it bridges the gap between passive cricket viewing and tactical roster construction.
               </p>
 
               <div className="border border-white/10 rounded-md p-5 sm:p-6 bg-white/[0.01] space-y-4">
@@ -155,7 +155,7 @@ const AboutUs = () => {
                   Every year, millions of cricket enthusiasts worldwide watch team owners and analysts commit hundreds of crores at the IPL Mega Auction table. While fantasy leagues focus only on match points, the true foundation of every championship franchise is built in the auction hall—through purse discipline, smart scouting, role balancing, and bidding composure under time pressure.
                 </p>
                 <p className="text-sm text-gray-300 leading-relaxed font-normal">
-                  CrickAuction was founded to make this tactical auction masterclass accessible to everyone. Whether you are hosting a high-stakes league with 9 friends or playing offline solo against our autonomous AI bot franchises, our simulator delivers realistic bidding dynamics, authentic purse mathematics, and instant feedback at professional esports standards.
+                  TheGavel was founded to make this tactical auction masterclass accessible to everyone. Whether you are hosting a high-stakes league with 9 friends or playing offline solo against our autonomous AI bot franchises, our simulator delivers realistic bidding dynamics, authentic purse mathematics, and instant feedback at professional esports standards.
                 </p>
               </div>
             </section>
@@ -254,10 +254,10 @@ const AboutUs = () => {
                     <span>Lead Architect & Maintainer</span>
                   </div>
                   <h3 className="text-xl font-bold text-white mb-2">
-                    Shaurya Upadhyay
+                    Harshavardhan
                   </h3>
                   <p className="text-xs sm:text-sm text-gray-400 leading-relaxed font-normal max-w-xl">
-                    Software engineer and cricket simulation architect. CrickAuction is maintained with continuous roster revisions, performance profiling, and community-driven features to guarantee an authentic, transparent, and responsive simulator for cricket fans worldwide.
+                    Software engineer and cricket simulation architect. TheGavel is maintained with continuous roster revisions, performance profiling, and community-driven features to guarantee an authentic, transparent, and responsive simulator for cricket fans worldwide.
                   </p>
                 </div>
 
@@ -289,7 +289,7 @@ const AboutUs = () => {
               <h2 className="text-xl font-semibold text-white mb-2">5. Non-Affiliation Disclaimer</h2>
               <div className="border border-white/10 rounded-md p-5 bg-white/[0.01] text-xs text-gray-400 leading-relaxed space-y-2">
                 <p>
-                  CrickAuction is an independent fan-created simulation project developed strictly for educational and entertainment purposes. CrickAuction is not affiliated with, endorsed by, or sponsored by the Board of Control for Cricket in India (BCCI), the Indian Premier League (IPL), or any participating franchise.
+                  TheGavel is an independent fan-created simulation project developed strictly for educational and entertainment purposes. TheGavel is not affiliated with, endorsed by, or sponsored by the Board of Control for Cricket in India (BCCI), the Indian Premier League (IPL), or any participating franchise.
                 </p>
                 <p>
                   All franchise trademarks, team names, logos, player names, and associated likenesses remain the sole intellectual property of their respective rights holders.
