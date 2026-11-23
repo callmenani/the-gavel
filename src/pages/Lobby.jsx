@@ -45,6 +45,8 @@ import { getRtdb } from '../lib/firebase';
 import { isSoloBotRoom } from '../lib/botSimulation';
 import { convertLobbyToSolo } from '../lib/lobbyConversion';
 import { updateAuctionRecord } from '../lib/directoryApi';
+import { buildWatchUrl } from '../lib/watchLinks';
+import { isWatchLiveAuction } from '../lib/watchSpectate';
 
 // Small-screen detection (matches the 767px breakpoint used in index.css).
 // Framer-motion elements render without any animation when this is true.
@@ -65,7 +67,7 @@ const useIsMobile = () => {
   return isMobile;
 };
 
-const Lobby = () => {
+const Lobby = ({ entrySpectate = false, externalSpectateSession = false }) => {
   const { id } = useParams();
   useDocumentTitle(`Lobby ${id ? `#${id}` : ''} | TheGavel`, 'Live franchise team selection and auction hub.', true);
   const { server, ready: serverReady } = useRoomServer(id);
@@ -87,6 +89,7 @@ const Lobby = () => {
 
   const [activeTab, setActiveTab] = useState('players');
   const [copied, setCopied] = useState(false);
+  const [copiedWatch, setCopiedWatch] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isSelectingTeam, setIsSelectingTeam] = useState(null);
   const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
@@ -97,10 +100,11 @@ const Lobby = () => {
   const [actionError, setActionError] = useState(null);
   const [showBotInfo, setShowBotInfo] = useState(false);
 
-  const [spectateMode, setSpectateMode] = useState(() => {
+  const [spectateQuery, setSpectateMode] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('spectate') === 'true';
   });
+  const spectateMode = entrySpectate || spectateQuery;
 
   const isAdmin = canOperateAuction(currentAuction, user?.uid);
   const isRoomHost = currentAuction?.hostId === user?.uid;
@@ -110,9 +114,10 @@ const Lobby = () => {
   // Keep the public directory in sync so new rooms show up for other players.
   useEffect(() => {
     if (!isAdmin || !id || currentAuction?.isPublic === false) return undefined;
-    if (currentAuction?.status !== 'waiting' && currentAuction?.status !== 'active') return undefined;
+    const dirStatus = currentAuction?.status;
+    if (!['waiting', 'active', 'paused'].includes(dirStatus)) return undefined;
     const payload = {
-      status: currentAuction.status,
+      status: dirStatus,
       host_online: 1,
     };
     if (Array.isArray(currentAuction.players)) {
@@ -257,19 +262,23 @@ const Lobby = () => {
   }, []);
 
   useEffect(() => {
-    if (!serverReady || !id || !user?.uid) return;
+    if (externalSpectateSession) return undefined;
+    if (!serverReady || !id || !user?.uid) return undefined;
     const unsub = joinAuction(id, user.uid, server);
     return () => unsub();
-  }, [id, user?.uid, joinAuction, server, serverReady]);
+  }, [id, user?.uid, joinAuction, server, serverReady, externalSpectateSession]);
 
   useEffect(() => {
     if (!serverReady) return;
-    if (currentAuction?.status === 'active') {
-      navigate(withServerParam(`/auction/${id}`, server), { replace: true });
+    if (isWatchLiveAuction(currentAuction)) {
+      const dest = entrySpectate
+        ? withServerParam(`/watch/${id}`, server)
+        : withServerParam(`/auction/${id}`, server);
+      navigate(dest, { replace: true });
     } else if (currentAuction?.status === 'completed') {
       navigate(withServerParam(`/summary/${id}`, server), { replace: true });
     }
-  }, [currentAuction?.status, id, navigate, server, serverReady]);
+  }, [currentAuction?.status, id, navigate, server, serverReady, entrySpectate]);
 
   useEffect(() => {
     if (currentAuction && user) {
@@ -289,7 +298,7 @@ const Lobby = () => {
     isMobile ? { initial: false, animate: SETTLED } : { initial: from, animate: SETTLED, ...extra };
   const exitProps = (exit) => (isMobile ? {} : { exit });
 
-  if (currentAuction?.status === 'completed' || currentAuction?.status === 'active') return null;
+  if (currentAuction?.status === 'completed' || isWatchLiveAuction(currentAuction)) return null;
 
   // ─── Handlers ───
   const handleStartAuction = async () => {
@@ -388,6 +397,12 @@ const Lobby = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const copyWatchLink = () => {
+    navigator.clipboard.writeText(buildWatchUrl(id, server));
+    setCopiedWatch(true);
+    setTimeout(() => setCopiedWatch(false), 2000);
+  };
+
   const shareWhatsApp = () => {
     const text = `Join my IPL Auction room! Code: ${id}\n${window.location.href}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
@@ -426,11 +441,11 @@ const Lobby = () => {
     );
   }
 
-  if (authLoading) {
+  if (authLoading || (entrySpectate && !user)) {
     return <PageLoader text="Authenticating..." />;
   }
 
-  if (!user) {
+  if (!user && !entrySpectate) {
     return (
       <div className="relative min-h-screen bg-transparent flex flex-col items-center justify-center py-12 px-4 font-sans text-white overflow-x-hidden">
         <PageBackground />
@@ -688,10 +703,35 @@ const Lobby = () => {
           {spectateMode && (
             <div className="flex items-center gap-1 px-2.5 py-1 bg-white/5 border border-white/10 rounded-full text-slate-300 font-black text-[8px] sm:text-[9px] uppercase tracking-widest whitespace-nowrap shrink-0">
               <Eye size={11} className="sm:w-3 sm:h-3" />
-              <span>SPECTATING</span>
+              <span>Read only</span>
             </div>
           )}
         </div>
+
+        {spectateMode && (
+          <div className="w-full max-w-6xl mb-4 z-20 px-2 sm:px-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 sm:px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-300">
+                  Spectating — read only
+                </p>
+                {entrySpectate && currentAuction?.status === 'waiting' && (
+                  <p className="text-[9px] sm:text-[10px] font-bold text-amber-300/90 mt-1 flex items-center gap-1.5">
+                    <Clock size={12} className="shrink-0" />
+                    Auction not started yet — full live stream starts when the host ignites the room.
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate(withServerParam(`/lobby/${id}`, server))}
+                className="px-3 py-1.5 bg-white hover:bg-slate-200 text-black font-black text-[9px] uppercase tracking-widest rounded-lg transition-all active:scale-95 cursor-pointer shrink-0"
+              >
+                Join as player
+              </button>
+            </div>
+          </div>
+        )}
 
         {isAdmin && (
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -766,13 +806,15 @@ const Lobby = () => {
             {/* Divider */}
             <div className="w-full h-px bg-white/5" />
 
-            {/* Franchise Selector */}
+            {/* Franchise Selector — read-only for /watch visitors */}
             <div>
               <div className="flex items-center justify-between mb-3 sm:mb-4">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Claim Franchise</h3>
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                    {entrySpectate && spectateMode ? 'Franchise Roster' : 'Claim Franchise'}
+                  </h3>
                 </div>
-                {currentUserPlayer?.team && (
+                {!entrySpectate && currentUserPlayer?.team && (
                   <div className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded uppercase tracking-wider">Locked In</div>
                 )}
               </div>
@@ -781,18 +823,33 @@ const Lobby = () => {
                 {TEAMS.map((team) => {
                   const isTaken = teamAssignments[team.id];
                   const isMine = currentUserPlayer?.team === team.id;
+                  const watchReadOnly = entrySpectate && spectateMode;
 
-                  return (
+                  const cellClass = `relative group/team flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 border ${
+                    watchReadOnly
+                      ? 'border-white/5 bg-white/[0.02] cursor-default'
+                      : isMine
+                        ? 'bg-white/10 border-white/25 scale-[1.02] shadow-lg cursor-pointer'
+                        : isTaken
+                          ? 'border-transparent opacity-20 grayscale cursor-not-allowed'
+                          : 'border-transparent hover:bg-white/[0.04] cursor-pointer'
+                  }`;
+
+                  return watchReadOnly ? (
+                    <div key={team.id} className={cellClass}>
+                      <div className="w-9 h-9 rounded-xl bg-white/5 border border-white/5 p-1.5 flex items-center justify-center mb-1.5">
+                        <img src={team.logo} alt={`${team.name || team.id} Logo`} className="w-full h-full object-contain" />
+                      </div>
+                      <span className="text-[8px] font-black uppercase text-center tracking-tighter truncate w-full text-slate-500">
+                        {isTaken ? isTaken.split(' ')[0] : '—'}
+                      </span>
+                    </div>
+                  ) : (
                     <button
                       key={team.id}
                       onClick={() => handleTeamSelect(team.id)}
                       disabled={!!isTaken && !isMine}
-                      className={`relative group/team flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 border cursor-pointer ${isMine
-                        ? 'bg-white/10 border-white/25 scale-[1.02] shadow-lg'
-                        : isTaken
-                          ? 'border-transparent opacity-20 grayscale cursor-not-allowed'
-                          : 'border-transparent hover:bg-white/[0.04]'
-                        }`}
+                      className={cellClass}
                     >
                       {isMine && (
                         <div className="absolute top-1.5 right-1.5 text-white z-20">
@@ -826,7 +883,7 @@ const Lobby = () => {
                 <div className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-xs text-slate-400 font-mono font-medium truncate flex items-center">
                   {window.location.href}
                 </div>
-                <button onClick={copyLink} className="p-2.5 sm:p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/5 relative group/copy cursor-pointer text-slate-300 hover:text-white" title="Copy Link">
+                <button onClick={copyLink} className="p-2.5 sm:p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/5 relative group/copy cursor-pointer text-slate-300 hover:text-white" title="Copy lobby link">
                   {copied ? <CheckCircle2 size={16} className="text-emerald-400 sm:w-[18px] sm:h-[18px]" /> : <Copy size={16} className="group-hover/copy:scale-110 transition-transform sm:w-[18px] sm:h-[18px]" />}
                 </button>
                 <button
@@ -837,6 +894,23 @@ const Lobby = () => {
                   <MessageSquare size={16} className="group-hover/wa:scale-110 transition-transform sm:w-[18px] sm:h-[18px]" />
                 </button>
               </div>
+              {FEATURE_MULTIPLAYER && (
+                <div className="flex gap-2 sm:gap-3 mt-2 sm:mt-2.5">
+                  <div className="flex-1 bg-black/40 border border-sky-500/15 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-[11px] text-sky-300/80 font-mono font-medium truncate flex items-center gap-2">
+                    <Eye size={14} className="shrink-0 text-sky-400/80" />
+                    {buildWatchUrl(id, server)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={copyWatchLink}
+                    className="px-3 sm:px-4 py-2 sm:py-2.5 bg-sky-500/10 hover:bg-sky-500/20 rounded-xl transition-all border border-sky-500/20 text-sky-300 font-black text-[9px] uppercase tracking-widest cursor-pointer flex items-center gap-1.5 shrink-0"
+                    title="Copy watch link"
+                  >
+                    {copiedWatch ? <Check size={14} /> : <Copy size={14} />}
+                    <span className="hidden sm:inline">Copy watch link</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Divider */}

@@ -7,6 +7,7 @@ import { ConnectionAlertProvider } from './contexts/ConnectionAlertContext'
 import ScrollToTop from './components/ScrollToTop'
 import PageLoader from './components/PageLoader'
 import HomePage from './pages/HomePage'
+import LiveNowPage from './pages/LiveNowPage'
 import LandingPage from './pages/LandingPage'
 import './index.css'
 
@@ -23,6 +24,7 @@ const TermsConditions = lazy(() => import('./pages/TermsConditions'))
 const PhotoCredits    = lazy(() => import('./pages/PhotoCredits'))
 const AdminPanel      = lazy(() => import('./pages/AdminPanel'))
 const NotFound        = lazy(() => import('./pages/NotFound'))
+const WatchRoom       = lazy(() => import('./pages/WatchRoom'))
 
 // ── Lazy-loaded heavy modals (defer until after first paint) ──────────────────
 const QuotaExceededModal   = lazy(() => import('./components/QuotaExceededModal'))
@@ -52,6 +54,7 @@ function App() {
 
                 <Routes>
                   <Route path="/" element={<HomePage />} />
+                  <Route path="/live" element={<LiveNowPage />} />
                   <Route path="/play" element={<LandingPage />} />
                   <Route path="/play/join" element={<LandingPage />} />
                   <Route path="/play/history" element={<LandingPage />} />
@@ -89,6 +92,9 @@ function App() {
                   } />
                   <Route path="/lobby/:id" element={
                     <Suspense fallback={<PageFallback />}><Lobby /></Suspense>
+                  } />
+                  <Route path="/watch/:id" element={
+                    <Suspense fallback={<PageFallback />}><WatchRoom /></Suspense>
                   } />
                   <Route path="/auction/:id" element={
                     <Suspense fallback={<PageFallback />}><AuctionRoom /></Suspense>

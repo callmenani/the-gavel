@@ -105,6 +105,7 @@ import {
   isLocalRoom,
   loadLocalSoloRoom,
   saveLocalSoloRoom,
+  STORAGE_PREFIX,
   localAuctionReducer,
   acquireSoloRoomLock,
   buildSoloPersistPayload,
@@ -2058,6 +2059,80 @@ export const AuctionProvider = ({ children }) => {
     }
   }, []);
 
+  const applyLocalSoloSnapshot = useCallback((saved, userId) => {
+    if (!saved) return;
+    const initialLot = saved.currentAuction || saved.currentLot;
+    setCurrentAuction({
+      ...saved,
+      currentAuction: initialLot,
+      currentLot: initialLot,
+      isSoloBotRoom: true,
+      server: SERVER_LOCAL,
+    });
+    const teamsList = saved.roomTeams || saved.teams || [];
+    setRoomTeams(teamsList);
+    setMessages(saved.messages || []);
+    const humanTeam = teamsList.find(
+      (t) => t.userId === userId || t.userId === user?.uid || !String(t.userId).startsWith('bot_'),
+    );
+    if (humanTeam) {
+      setTeam({
+        ...humanTeam,
+        id: humanTeam.teamId || humanTeam.id,
+        teamId: humanTeam.teamId || humanTeam.id,
+        team: humanTeam.teamId || humanTeam.id,
+      });
+    } else {
+      setTeam(null);
+    }
+  }, [user?.uid]);
+
+  /** Read-only mirror for /watch on device-local SOLO rooms (no tab lock, poll storage). */
+  const joinLocalSoloSpectate = useCallback((auctionId) => {
+    clearConnectionAlert();
+    setLoading(true);
+    setSoloLockStatus('active');
+
+    const saved = loadLocalSoloRoom(auctionId);
+    if (!saved) {
+      setCurrentAuction(null);
+      setLoading(false);
+      return () => {};
+    }
+
+    enterLocalMode();
+    localSoloStateRef.current = saved;
+    applyLocalSoloSnapshot(saved, null);
+    setLoading(false);
+
+    const syncFromStorage = () => {
+      const fresh = loadLocalSoloRoom(auctionId);
+      if (!fresh) return;
+      localSoloStateRef.current = fresh;
+      applyLocalSoloSnapshot(fresh, null);
+    };
+
+    const poll = setInterval(syncFromStorage, 400);
+    const storageKey = `${STORAGE_PREFIX}${auctionId}`;
+    const onStorage = (event) => {
+      if (event.key === storageKey || event.key === null) {
+        syncFromStorage();
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', onStorage);
+    }
+
+    return () => {
+      clearInterval(poll);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', onStorage);
+      }
+      localSoloStateRef.current = null;
+      exitLocalMode();
+    };
+  }, [applyLocalSoloSnapshot, clearConnectionAlert]);
+
   const joinLocalSoloAuction = useCallback((auctionId, userId) => {
     clearConnectionAlert();
     setLoading(true);
@@ -2194,11 +2269,14 @@ export const AuctionProvider = ({ children }) => {
   }, [clearConnectionAlert, updateLocalSoloState]);
 
   // Listen to current auction state live
-  const joinAuction = useCallback((auctionId, userId, serverHint) => {
+  const joinAuction = useCallback((auctionId, userId, serverHint, options = {}) => {
     if (!userId) return () => {};
 
     const localStoreExists = Boolean(loadLocalSoloRoom(auctionId));
     if (isLocalRoom(auctionId, serverHint, localStoreExists)) {
+      if (options.spectate) {
+        return joinLocalSoloSpectate(auctionId);
+      }
       return joinLocalSoloAuction(auctionId, userId);
     }
 

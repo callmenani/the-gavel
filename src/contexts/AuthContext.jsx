@@ -16,6 +16,7 @@ const AuthContext = createContext({
   loading: true,
   loginWithGoogle: async () => { },
   loginAsGuest: async () => { },
+  loginAsSpectator: async () => { },
   logout: async () => { }
 });
 
@@ -97,6 +98,32 @@ export const AuthProvider = ({ children }) => {
     return result.user;
   };
 
+  /** Silent anonymous session for read-only spectate routes (no UI gate). */
+  const loginAsSpectator = async () => {
+    if (!isFirebaseConfigured) {
+      let localUser = restoreLocalUser();
+      if (!localUser) {
+        localUser = createLocalUser('Spectator');
+        persistLocalUser(localUser);
+      }
+      setUser(localUser);
+      setLoading(false);
+      return localUser;
+    }
+    if (auth.currentUser) {
+      return auth.currentUser;
+    }
+    const result = await signInAnonymously(auth);
+    try {
+      await updateProfile(result.user, { displayName: 'Spectator' });
+    } catch {
+      // Non-blocking — display name is cosmetic for watch-only sessions.
+    }
+    setUser(result.user);
+    setLoading(false);
+    return result.user;
+  };
+
   const logout = () => {
     if (!isFirebaseConfigured) {
       setUser(null);
@@ -111,6 +138,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     loginWithGoogle,
     loginAsGuest,
+    loginAsSpectator,
     logout
   };
 

@@ -87,6 +87,13 @@ const HomePage = () => {
                   <ArrowRight size={16} />
                 </Link>
                 <Link
+                  to="/live"
+                  className="inline-flex items-center justify-center gap-2 min-h-12 px-8 rounded-xl bg-red-500/15 border border-red-500/30 text-red-100 font-black uppercase tracking-widest text-xs hover:bg-red-500/25 transition-all"
+                >
+                  <Radio size={16} />
+                  Watch live
+                </Link>
+                <Link
                   to="/features"
                   className="inline-flex items-center justify-center gap-2 min-h-12 px-8 rounded-xl bg-white/5 border border-white/15 text-slate-200 font-black uppercase tracking-widest text-xs hover:bg-white/10 hover:border-white/25 transition-all"
                 >
