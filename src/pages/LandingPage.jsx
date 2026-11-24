@@ -61,7 +61,9 @@ import {
   Clock,
   Plus,
   Cloud,
+  Eye,
 } from "lucide-react";
+import { buildTvWatchPath } from "../lib/watchLinks";
 import Navbar from "../components/Navbar";
 import ConfirmDialog from "../components/ConfirmDialog";
 import AuctionActivityFeed from "../components/AuctionActivityFeed";
@@ -349,6 +351,12 @@ const LandingPage = () => {
     const interval = setInterval(tick, 25_000);
     return () => clearInterval(interval);
   }, [fetchPublicRoomsList]);
+
+  const handleWatchPublicRoom = (room) => {
+    if (!room?.id) return;
+    const server = room.server || selectedServer;
+    navigate(buildTvWatchPath(room.id, server));
+  };
 
   const handleJoinPublicRoom = async (room) => {
     if (!room?.id || isSubmitting) return;
@@ -1508,18 +1516,31 @@ const LandingPage = () => {
                             </div>
                           </div>
 
-                          <button
-                            type="button"
-                            disabled={isSubmitting}
-                            onClick={() => handleJoinPublicRoom(room)}
-                            className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-white/10 hover:bg-white/20 border border-white/10 text-white font-black text-[8px] sm:text-[10px] uppercase tracking-wider rounded-lg transition-all active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer shadow-md disabled:opacity-50"
-                          >
-                            <span>Join</span>
-                            <ChevronRight
-                              size={12}
-                              className="group-hover:translate-x-0.5 transition-transform"
-                            />
-                          </button>
+                          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                            {FEATURE_MULTIPLAYER && (
+                              <button
+                                type="button"
+                                onClick={() => handleWatchPublicRoom(room)}
+                                className="px-2 sm:px-2.5 py-1.5 sm:py-2 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/25 text-sky-200 font-black text-[8px] sm:text-[9px] uppercase tracking-wider rounded-lg transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                                title="Watch live (read-only)"
+                              >
+                                <Eye size={12} />
+                                <span className="hidden xs:inline">Watch</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              disabled={isSubmitting}
+                              onClick={() => handleJoinPublicRoom(room)}
+                              className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-white/10 hover:bg-white/20 border border-white/10 text-white font-black text-[8px] sm:text-[10px] uppercase tracking-wider rounded-lg transition-all active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer shadow-md disabled:opacity-50"
+                            >
+                              <span>Join</span>
+                              <ChevronRight
+                                size={12}
+                                className="group-hover:translate-x-0.5 transition-transform"
+                              />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>

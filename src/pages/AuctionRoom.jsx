@@ -68,8 +68,18 @@ import {
    r2,
    toFiniteNumber,
 } from '../lib/auctionDisplay';
+import { isWatchLiveAuction } from '../lib/watchSpectate';
+import { buildTvWatchUrl, buildWatchUrl } from '../lib/watchLinks';
+import { invalidatePublicRoomsCache, updateAuctionRecord } from '../lib/directoryApi';
+import { FEATURE_MULTIPLAYER } from '../lib/appConfig';
+import TvSpectateStage from '../components/spectate/TvSpectateStage';
 
-const AuctionRoom = () => {
+const AuctionRoom = ({
+  entrySpectate = false,
+  externalSpectateSession = false,
+  tvSpectate = false,
+  onRequestTvMode = null,
+}) => {
    const { id } = useParams();
    useDocumentTitle(`Auction Room #${id || ''} | TheGavel`, 'Live multiplayer IPL Auction bidding arena.', true);
    const navigate = useNavigate();
@@ -104,6 +114,7 @@ const AuctionRoom = () => {
    const { user } = useAuth();
    const [error, setError] = useState('');
    const [copied, setCopied] = useState(false);
+   const [copiedWatch, setCopiedWatch] = useState(false);
    const [showPlayersOverlay, setShowPlayersOverlay] = useState(false);
    const [activeOverlayTab, setActiveOverlayTab] = useState('upcoming');
    const [searchQuery] = useState('');
@@ -149,10 +160,11 @@ const AuctionRoom = () => {
    const [joiningTeam, setJoiningTeam] = useState(null);
    const [banError, setBanError] = useState(null);
    const [isBiddingInFlight, setIsBiddingInFlight] = useState(false);
-   const [spectateMode, setSpectateMode] = useState(() => {
+   const [spectateQuery, setSpectateMode] = useState(() => {
       const params = new URLSearchParams(window.location.search);
       return params.get('spectate') === 'true';
    });
+   const spectateMode = entrySpectate || spectateQuery;
 
    // Clear optimistic state when DB catches up, player changes, or lot finalizes
    useEffect(() => {
@@ -179,6 +191,28 @@ const AuctionRoom = () => {
    ]);
 
    const displayAuctionState = optimisticState || currentAuction?.currentAuction || currentAuction?.currentLot;
+
+   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
+   useEffect(() => {
+     const onFs = () => setIsBrowserFullscreen(Boolean(document.fullscreenElement));
+     document.addEventListener('fullscreenchange', onFs);
+     return () => document.removeEventListener('fullscreenchange', onFs);
+   }, []);
+
+   const tvTimerSec = useMemo(() => {
+      if (displayAuctionState?.status !== 'bidding' || !displayAuctionState?.timerEndsAt) return null;
+      const rem = Math.max(0, Math.ceil((displayAuctionState.timerEndsAt - getSyncedTime()) / 1000));
+      return rem;
+   }, [displayAuctionState?.status, displayAuctionState?.timerEndsAt, getSyncedTime]);
+
+   const toggleSpectateFullscreen = async () => {
+      try {
+         if (document.fullscreenElement) await document.exitFullscreen();
+         else await document.documentElement.requestFullscreen();
+      } catch {
+        // ignore
+      }
+   };
 
    // Solo vs AI bots detection: strictly device-local rooms
    const isSoloVsBots = useMemo(() => {
@@ -475,19 +509,22 @@ const AuctionRoom = () => {
            replace: true,
            state: { defaultTab: 'league' },
          });
-      } else if (currentAuction?.status === 'waiting') {
-         navigate(withServerParam(`/lobby/${id}`, server), { replace: true });
+      } else if (currentAuction?.status === 'waiting' && !isWatchLiveAuction(currentAuction)) {
+         const dest = entrySpectate
+            ? withServerParam(`/watch/${id}`, server)
+            : withServerParam(`/lobby/${id}`, server);
+         navigate(dest, { replace: true });
       }
-   }, [currentAuction?.status, id, navigate, server, serverReady]);
+   }, [currentAuction?.status, id, navigate, server, serverReady, entrySpectate]);
 
    // Missing-auth redirects must happen in an effect, never during render.
    useEffect(() => {
-      if (!serverReady) return;
+      if (!serverReady || entrySpectate) return;
       if (!user && !loading && !redirectedToLobbyRef.current) {
          redirectedToLobbyRef.current = true;
          navigate(withServerParam(`/lobby/${id}`, server), { replace: true });
       }
-   }, [user, loading, id, navigate, server, serverReady]);
+   }, [user, loading, id, navigate, server, serverReady, entrySpectate]);
 
    const TEAM_SONGS = {
       'csk': '/CSK.mp3',
@@ -802,6 +839,19 @@ const AuctionRoom = () => {
      isAuctionManagerSelf;
    const noBidMode = spectateMode || isAuctionManagerSelf;
    const isHostBanner = isHandoverAdmin && currentAuction?.hostId !== user?.uid;
+
+   // Keep directory status in sync while the hammer runs (lobby unmounted after start).
+   useEffect(() => {
+      if (!FEATURE_MULTIPLAYER || isSoloVsBots || spectateMode || !id || !isAdmin) return undefined;
+      if (currentAuction?.isPublic === false) return undefined;
+      const s = currentAuction?.status;
+      if (s !== 'active' && s !== 'paused') return undefined;
+      updateAuctionRecord(id, { status: s, host_online: 1 })
+        .then(() => invalidatePublicRoomsCache())
+        .catch(() => {});
+      return undefined;
+   }, [id, isAdmin, isSoloVsBots, spectateMode, currentAuction?.status, currentAuction?.isPublic]);
+
    const currentBid = displayAuctionState?.currentBid || 0;
    const nextBidAmount = getNextBidAmount(currentPlayer, currentBid);
    const playerCategories = useMemo(() => {
@@ -865,10 +915,12 @@ const AuctionRoom = () => {
    }, [activeOverlayTab, filteredPlayers]);
 
    useEffect(() => {
-      if (!serverReady || !id || !user?.uid) return;
+      if (externalSpectateSession) return undefined;
+      if (!serverReady || !id || !user?.uid) return undefined;
       const unsub = joinAuction(id, user.uid, server);
 
       const autoJoin = async () => {
+         if (spectateMode) return;
          if (server === SERVER_LOCAL || isLocalRoom(id, server)) return;
          try {
             await joinRoomDb(id, user.uid, { name: user.displayName || 'Manager' }, server);
@@ -884,7 +936,7 @@ const AuctionRoom = () => {
       autoJoin();
 
       return () => unsub();
-   }, [id, user?.uid, user?.displayName, joinAuction, joinRoomDb, server, serverReady]);
+   }, [id, user?.uid, user?.displayName, joinAuction, joinRoomDb, server, serverReady, spectateMode, externalSpectateSession]);
 
    useEffect(() => {
       if (currentAuction && user) {
@@ -1168,6 +1220,22 @@ const AuctionRoom = () => {
       setTimeout(() => setCopied(false), 2000);
    };
 
+   const copyWatchLink = () => {
+      navigator.clipboard.writeText(buildWatchUrl(id, server));
+      setCopiedWatch(true);
+      setTimeout(() => setCopiedWatch(false), 2000);
+   };
+
+   const shareWatchWhatsApp = () => {
+      const text = `Watch our live IPL auction (TV view — no login):\n${buildWatchUrl(id, server)}`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+   };
+
+   const openSoloTvWatch = () => {
+      const url = buildTvWatchUrl(id, server);
+      window.open(url, '_blank', 'noopener,noreferrer');
+   };
+
    if (currentAuction?.id === id && currentAuction?.status === 'completed') {
       return <Navigate to={withServerParam(`/summary/${id}`, server)} replace />;
    }
@@ -1350,7 +1418,17 @@ const AuctionRoom = () => {
    }
 
    return (
-      <div ref={bindRoomShell} className="auction-room-shell max-md:fixed max-md:inset-0 md:relative md:h-screen-safe bg-[#000000] text-white font-sans flex flex-col items-center overflow-hidden selection:bg-white/20 selection:text-white">
+      <div ref={bindRoomShell} className={`auction-room-shell${spectateMode ? ' auction-room-shell--spectate' : ''} max-md:fixed max-md:inset-0 md:relative md:h-screen-safe bg-[#000000] text-white font-sans flex flex-col items-center overflow-hidden selection:bg-white/20 selection:text-white`}>
+         {spectateMode && tvSpectate && (
+            <TvSpectateStage
+               displayAuctionState={displayAuctionState}
+               roomTeams={roomTeams}
+               timerRemainingSec={tvTimerSec}
+               onToggleFullscreen={toggleSpectateFullscreen}
+               isFullscreen={isBrowserFullscreen}
+            />
+         )}
+         <div className={spectateMode && tvSpectate ? 'hidden' : 'contents'}>
          <PageBackground showArt={false} />
 
          {/* Perf: opaque header — a backdrop-blur bar re-renders on every scroll
@@ -1379,14 +1457,36 @@ const AuctionRoom = () => {
                      <span>Saved on this device</span>
                   </div>
                )}
-               <div className="flex items-center border-l border-white/10 pl-1.5 sm:pl-3">
+               <div className="flex items-center border-l border-white/10 pl-1.5 sm:pl-3 gap-1">
                   <button onClick={copyRoomId} className="p-1 sm:p-1.5 bg-white/5 text-slate-400 rounded-lg hover:text-white hover:bg-white/10 transition-colors cursor-pointer" title="Copy Room ID">
                      {copied ? <CheckCircle2 size={13} className="text-emerald-400" /> : <Copy size={13} />}
                   </button>
+                  {FEATURE_MULTIPLAYER && !isSoloVsBots && (
+                     <button
+                        type="button"
+                        onClick={copyWatchLink}
+                        className="p-1 sm:px-2 sm:py-1.5 bg-sky-500/10 border border-sky-500/25 text-sky-300 rounded-lg hover:bg-sky-500/20 transition-colors cursor-pointer flex items-center gap-1"
+                        title="Copy TV watch link — friends watch live without joining"
+                     >
+                        {copiedWatch ? <Check size={13} className="text-emerald-400" /> : <Eye size={13} />}
+                        <span className="hidden sm:inline text-[9px] font-black uppercase tracking-widest">Share live</span>
+                     </button>
+                  )}
                </div>
             </div>
 
             <div className="flex items-center gap-1 sm:gap-3 shrink-0">
+               {isSoloVsBots && !spectateMode && (
+                  <button
+                     type="button"
+                     onClick={openSoloTvWatch}
+                     className="p-1 sm:px-2.5 sm:py-1.5 bg-sky-500/15 border border-sky-500/30 rounded-lg text-sky-200 text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-sky-500/25 transition-all cursor-pointer flex items-center gap-1"
+                     title="Open TV view in another tab on this device (e.g. cast to a screen). Friends cannot watch solo rooms — use Public Lobby + Share live for that."
+                  >
+                     <Eye size={13} className="shrink-0" />
+                     <span>See live (TV)</span>
+                  </button>
+               )}
                {/* Solo vs AI Bots Fast Forward / Finish Button */}
                {isSoloVsBots && !spectateMode && (
                   <button
@@ -1404,7 +1504,7 @@ const AuctionRoom = () => {
                   </button>
                )}
 
-               {isAdmin && (
+               {isAdmin && !spectateMode && (
                   <div className="flex items-center gap-1 sm:gap-2">
                      {displayAuctionState?.status === 'paused' ? (
                         <button
@@ -1466,10 +1566,32 @@ const AuctionRoom = () => {
                      </button>
                   </div>
                )}
+               {FEATURE_MULTIPLAYER && !spectateMode && !isSoloVsBots && (
+                  <motion.div className="flex items-center gap-1 sm:gap-1.5 border-l border-sky-500/20 pl-1.5 sm:pl-2" layout={false}>
+                     <button
+                        type="button"
+                        onClick={copyWatchLink}
+                        className="p-1 sm:px-2.5 sm:py-1.5 bg-sky-500/15 border border-sky-500/30 rounded-lg text-sky-200 text-[10px] compact:text-[9px] font-black uppercase tracking-widest hover:bg-sky-500/25 transition-all cursor-pointer flex items-center gap-1 shadow-[0_0_12px_rgba(56,189,248,0.15)]"
+                        title="Copy TV watch link — spectators see live bids without joining"
+                     >
+                        {copiedWatch ? <Check size={13} className="text-emerald-400" /> : <Eye size={13} />}
+                        <span className="hidden sm:inline">Share live</span>
+                     </button>
+                     <button
+                        type="button"
+                        onClick={shareWatchWhatsApp}
+                        className="p-1 sm:px-2 sm:py-1.5 rounded-lg border border-[#25D366]/30 bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/15 transition-all cursor-pointer flex items-center gap-1"
+                        title="Share TV watch link on WhatsApp"
+                     >
+                        <MessageSquare size={13} />
+                        <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest">WA</span>
+                     </button>
+                  </motion.div>
+               )}
                <div className="flex items-center gap-1 border-l border-white/10 pl-1.5 sm:pl-3">
                   {/* P2P voice: join the room talk while you keep playing;
                       the panel lets you step out (mic closes, game stays on). */}
-                  {!isSoloVsBots && user?.uid && (
+                  {!spectateMode && !isSoloVsBots && user?.uid && (
                      <button
                         onClick={async () => {
                            if (voice.inVoice) voice.leaveVoice();
@@ -1495,6 +1617,43 @@ const AuctionRoom = () => {
                </div>
             </div>
          </header>
+
+         {spectateMode && (
+            <div className="relative z-30 w-full px-2.5 sm:px-4 md:px-6 pt-1.5 sm:pt-2 shrink-0">
+               <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 sm:px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-300 flex items-center gap-2">
+                     <Eye size={13} className="text-slate-400 shrink-0" />
+                     Spectating — read only
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                     {typeof onRequestTvMode === 'function' && !tvSpectate && (
+                        <button
+                           type="button"
+                           onClick={onRequestTvMode}
+                           className="px-3 py-1.5 bg-sky-500/25 border border-sky-400/40 text-white font-black text-[9px] uppercase tracking-widest rounded-lg cursor-pointer shrink-0"
+                        >
+                           TV mode
+                        </button>
+                     )}
+                     <button
+                        type="button"
+                        onClick={copyWatchLink}
+                        className="px-3 py-1.5 bg-sky-500/15 border border-sky-500/25 text-sky-200 font-black text-[9px] uppercase tracking-widest rounded-lg transition-all active:scale-95 cursor-pointer shrink-0 flex items-center gap-1.5"
+                     >
+                        {copiedWatch ? <Check size={12} /> : <Copy size={12} />}
+                        Copy watch link
+                     </button>
+                     <button
+                        type="button"
+                        onClick={() => navigate(withServerParam(`/lobby/${id}`, server))}
+                        className="px-3 py-1.5 bg-white hover:bg-slate-200 text-black font-black text-[9px] uppercase tracking-widest rounded-lg transition-all active:scale-95 cursor-pointer shrink-0"
+                     >
+                        Join as player
+                     </button>
+                  </div>
+               </div>
+            </div>
+         )}
 
          {/* Admin handover banner: shown when the original host is offline and
              this manager was auto-elevated to run the room. */}
@@ -2944,7 +3103,7 @@ const AuctionRoom = () => {
          </AnimatePresence>
 
          {/* Two-Tab Lock: Blocked by another active window */}
-         {isSoloVsBots && soloLockStatus === 'blocked' && (
+         {isSoloVsBots && soloLockStatus === 'blocked' && !spectateMode && (
             <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl p-4 sm:p-6 flex flex-col items-center justify-center text-center">
                <div className="relative z-10 flex flex-col items-center w-full max-w-md bg-[#0c0d10] border border-white/10 rounded-[2rem] p-6 sm:p-8 shadow-[0_24px_60px_-15px_rgba(0,0,0,0.85)]">
                   <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4 text-amber-400">
@@ -2973,7 +3132,7 @@ const AuctionRoom = () => {
          )}
 
          {/* Two-Tab Lock: Taken over by another window */}
-         {isSoloVsBots && soloLockStatus === 'taken_over' && (
+         {isSoloVsBots && soloLockStatus === 'taken_over' && !spectateMode && (
             <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl p-4 sm:p-6 flex flex-col items-center justify-center text-center">
                <div className="relative z-10 flex flex-col items-center w-full max-w-md bg-[#0c0d10] border border-white/10 rounded-[2rem] p-6 sm:p-8 shadow-[0_24px_60px_-15px_rgba(0,0,0,0.85)]">
                   <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4 text-red-400">
@@ -3046,6 +3205,7 @@ const AuctionRoom = () => {
             onConfirm={handleReopenLot}
             onCancel={() => !isConsentBusy && setShowReopenConfirm(false)}
          />
+         </div>
       </div>
    );
 };

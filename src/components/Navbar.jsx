@@ -6,6 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 
 const PRIMARY_LINKS = [
   { to: '/', label: 'Home', end: true },
+  { to: '/live', label: 'Live', end: true },
   { to: '/play', label: 'Play', matchPrefix: '/play' },
   { to: '/features', label: 'Features', end: true },
   { to: '/community', label: 'Community', end: true },
